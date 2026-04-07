@@ -14,7 +14,7 @@ from google.cloud import bigquery
 from google.genai.types import Content, Part
 from pydantic import BaseModel
 
-from .agent import root_agent
+from .agent import build_root_agent
 
 PROJECT_ID = os.getenv("GOOGLE_CLOUD_PROJECT", "learn-mcp-490919")
 SESSION_TABLE = f"{PROJECT_ID}.lease_lens.expansion_sessions"
@@ -22,14 +22,6 @@ APP_NAME = "lease_lens_ai"
 USER_ID = "lease_lens_ui"
 
 app = FastAPI(title="LeaseLens AI Backend")
-session_service = InMemorySessionService()
-memory_service = InMemoryMemoryService()
-runner = Runner(
-    agent=root_agent,
-    app_name=APP_NAME,
-    session_service=session_service,
-    memory_service=memory_service,
-)
 
 
 class RecommendationRequest(BaseModel):
@@ -283,8 +275,16 @@ Rules:
 
 
 async def run_agent_json(payload: RecommendationRequest) -> dict[str, Any]:
+    session_service = InMemorySessionService()
+    memory_service = InMemoryMemoryService()
+    runner = Runner(
+        agent=build_root_agent(),
+        app_name=APP_NAME,
+        session_service=session_service,
+        memory_service=memory_service,
+    )
     session_id = str(uuid4())
-    await runner.session_service.create_session(
+    await session_service.create_session(
         app_name=APP_NAME,
         user_id=USER_ID,
         session_id=session_id,

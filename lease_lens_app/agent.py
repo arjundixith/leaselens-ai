@@ -5,15 +5,18 @@ from . import tools
 
 dotenv.load_dotenv()
 PROJECT_ID = os.getenv("GOOGLE_CLOUD_PROJECT", "learn-mcp-490919")
+MODEL_NAME = os.getenv("LEASELENS_MODEL", "gemini-2.5-pro")
 
-bigquery_toolset = tools.get_bigquery_mcp_toolset()
-maps_toolset = tools.get_maps_mcp_toolset()
 
-location_intelligence_agent = LlmAgent(
-    name="location_intelligence_agent",
-    model="gemini-2.5-pro",
-    description="Finds and ranks Bangalore retail locations using BigQuery market data and Maps MCP context.",
-    instruction=f"""
+def build_root_agent():
+    bigquery_toolset = tools.get_bigquery_mcp_toolset()
+    maps_toolset = tools.get_maps_mcp_toolset()
+
+    location_intelligence_agent = LlmAgent(
+        name="location_intelligence_agent",
+        model=MODEL_NAME,
+        description="Finds and ranks Bangalore retail locations using BigQuery market data and Maps MCP context.",
+        instruction=f"""
 You are the Location Intelligence Agent for LeaseLens AI.
 
 Your job:
@@ -36,16 +39,16 @@ Requirements:
 - include Google Maps links when location recommendations are returned
 - store your final shortlist and rationale in session state for later agents
 """,
-    output_key="location_shortlist",
-    tools=[bigquery_toolset, maps_toolset],
-)
+        output_key="location_shortlist",
+        tools=[bigquery_toolset, maps_toolset],
+    )
 
 
-customer_fit_agent = LlmAgent(
-    name="customer_fit_agent",
-    model="gemini-2.5-pro",
-    description="Interprets the shortlist against customer profile, risk, and commercial fit.",
-    instruction="""
+    customer_fit_agent = LlmAgent(
+        name="customer_fit_agent",
+        model=MODEL_NAME,
+        description="Interprets the shortlist against customer profile, risk, and commercial fit.",
+        instruction="""
 You are the Customer Fit Agent for LeaseLens AI.
 
 Use the location shortlist from {location_shortlist}.
@@ -60,15 +63,15 @@ Requirements:
 - identify one key risk or trade-off
 - preserve concise, product-grade language
 """,
-    output_key="customer_fit_memo",
-)
+        output_key="customer_fit_memo",
+    )
 
 
-launch_planner_agent = LlmAgent(
-    name="launch_planner_agent",
-    model="gemini-2.5-pro",
-    description="Turns the shortlisted market and fit memo into an actionable launch plan.",
-    instruction="""
+    launch_planner_agent = LlmAgent(
+        name="launch_planner_agent",
+        model=MODEL_NAME,
+        description="Turns the shortlisted market and fit memo into an actionable launch plan.",
+        instruction="""
 You are the Launch Planner Agent for LeaseLens AI.
 
 Use:
@@ -85,26 +88,26 @@ Requirements:
 - focus on validation, commercial diligence, and launch readiness
 - keep it concise and investor/demo ready
 """,
-    output_key="launch_plan",
-)
+        output_key="launch_plan",
+    )
 
 
-expansion_workflow_agent = SequentialAgent(
-    name="expansion_workflow_agent",
-    description="Runs the retail expansion workflow across location analysis, customer fit, and launch planning.",
-    sub_agents=[
-        location_intelligence_agent,
-        customer_fit_agent,
-        launch_planner_agent,
-    ],
-)
+    expansion_workflow_agent = SequentialAgent(
+        name="expansion_workflow_agent",
+        description="Runs the retail expansion workflow across location analysis, customer fit, and launch planning.",
+        sub_agents=[
+            location_intelligence_agent,
+            customer_fit_agent,
+            launch_planner_agent,
+        ],
+    )
 
 
-root_agent = LlmAgent(
-    model="gemini-2.5-pro",
-    name="lease_lens_coordinator",
-    description="Primary coordinator agent for LeaseLens AI. Delegates to specialist sub-agents to complete retail expansion workflows.",
-    instruction=f"""
+    return LlmAgent(
+        model=MODEL_NAME,
+        name="lease_lens_coordinator",
+        description="Primary coordinator agent for LeaseLens AI. Delegates to specialist sub-agents to complete retail expansion workflows.",
+        instruction=f"""
 You are LeaseLens AI, a multi-agent retail expansion assistant for Bangalore.
 
 You help founders and expansion teams choose the best Bangalore areas or pincodes to open a new business such as:
@@ -144,8 +147,7 @@ Response format:
   - decision checklist
 - Keep it concise, polished, and investor/demo ready
     """,
-    tools=[bigquery_toolset, maps_toolset],
-    sub_agents=[
-        expansion_workflow_agent,
-    ],
-)
+        sub_agents=[
+            expansion_workflow_agent,
+        ],
+    )
