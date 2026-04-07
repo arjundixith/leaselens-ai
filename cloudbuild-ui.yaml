@@ -29,3 +29,6 @@ steps:
 
 images:
   - us-central1-docker.pkg.dev/$PROJECT_ID/lease-lens-repo/lease-lens-ui:$COMMIT_SHA
+
+options:
+  logging: CLOUD_LOGGING_ONLY
