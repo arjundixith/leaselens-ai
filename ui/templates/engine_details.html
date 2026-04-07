@@ -74,6 +74,35 @@
 
     <section class="panel">
       <div class="section-head">
+        <h2>Challenge Mapping</h2>
+        <p>This implementation is deliberately structured so the technical requirements are visible in the product and codebase.</p>
+      </div>
+      <div class="workflow-grid">
+        <article class="workflow-card">
+          <p class="workflow-label">Primary Agent + Sub-Agents</p>
+          <p>The ADK backend uses a coordinator agent and a sequential workflow of specialist agents for location analysis, customer fit, and launch planning.</p>
+        </article>
+        <article class="workflow-card">
+          <p class="workflow-label">Structured Database</p>
+          <p>BigQuery is used for both retrieval of retail intelligence and persistence of saved expansion sessions.</p>
+        </article>
+        <article class="workflow-card">
+          <p class="workflow-label">Multiple MCP Tools</p>
+          <p>The backend is wired to BigQuery MCP and Google Maps MCP so reasoning and validation can use multiple external tools.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="section-head">
+        <h2>Stored Workflow State</h2>
+        <p>Each expansion run is saved as structured data so the system does not only retrieve intelligence, it also persists decision context for follow-up work.</p>
+      </div>
+      <div id="recent-sessions" class="results-empty">Loading recent saved sessions...</div>
+    </section>
+
+    <section class="panel">
+      <div class="section-head">
         <h2>What Reviewers Should Notice</h2>
         <p>The system is intentionally designed to feel like a practical expansion copilot instead of an academic workflow visual.</p>
       </div>
@@ -94,5 +123,40 @@
       <p class="details-backlink"><a href="/">Back to main product experience</a></p>
     </section>
   </main>
+
+  <script>
+    const sessionsRoot = document.getElementById('recent-sessions');
+
+    async function loadRecentSessions() {
+      try {
+        const response = await fetch('/recent-sessions');
+        const data = await response.json();
+        const sessions = data.sessions || [];
+
+        if (!sessions.length) {
+          sessionsRoot.innerHTML = 'No saved sessions yet. Generate an expansion plan from the main app to populate this view.';
+          return;
+        }
+
+        sessionsRoot.innerHTML = `
+          <div class="workflow-grid">
+            ${sessions.map(session => `
+              <article class="workflow-card">
+                <p class="workflow-label">${session.business_type} | ${session.budget}</p>
+                <p><strong>Lead Market</strong><br>${session.lead_market}</p>
+                <p class="workflow-note"><strong>Customer</strong><br>${session.customer_type}</p>
+                <p class="workflow-note"><strong>Risk Watch</strong><br>${session.risk_watch}</p>
+                <p class="workflow-note"><strong>Next Milestone</strong><br>${session.next_milestone}</p>
+              </article>
+            `).join('')}
+          </div>
+        `;
+      } catch {
+        sessionsRoot.innerHTML = 'Unable to load recent saved sessions right now.';
+      }
+    }
+
+    loadRecentSessions();
+  </script>
 </body>
 </html>

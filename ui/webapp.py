@@ -1,4 +1,5 @@
 import os
+from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import quote_plus
 
@@ -12,6 +13,7 @@ BASE_DIR = Path(__file__).resolve().parent
 PROJECT_ID = os.getenv("GOOGLE_CLOUD_PROJECT", "learn-mcp-490919")
 AREA_TABLE = f"{PROJECT_ID}.lease_lens.area_live_scores_serving"
 PROFILE_TABLE = f"{PROJECT_ID}.lease_lens.business_profiles"
+SESSION_TABLE = f"{PROJECT_ID}.lease_lens.expansion_sessions"
 
 app = FastAPI(title="LeaseLens UI")
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
@@ -207,6 +209,89 @@ def valid_area_clause() -> str:
     """
 
 
+def ensure_session_table(client: bigquery.Client):
+    schema = [
+        bigquery.SchemaField("session_id", "STRING"),
+        bigquery.SchemaField("created_at", "TIMESTAMP"),
+        bigquery.SchemaField("business_type", "STRING"),
+        bigquery.SchemaField("budget", "STRING"),
+        bigquery.SchemaField("customer_type", "STRING"),
+        bigquery.SchemaField("competition_tolerance", "STRING"),
+        bigquery.SchemaField("area_name", "STRING"),
+        bigquery.SchemaField("pincode", "STRING"),
+        bigquery.SchemaField("lead_market", "STRING"),
+        bigquery.SchemaField("launch_thesis", "STRING"),
+        bigquery.SchemaField("risk_watch", "STRING"),
+        bigquery.SchemaField("next_milestone", "STRING"),
+    ]
+    try:
+        client.get_table(SESSION_TABLE)
+    except Exception:
+        client.create_table(bigquery.Table(SESSION_TABLE, schema=schema), exists_ok=True)
+
+
+def save_expansion_session(
+    client: bigquery.Client,
+    business_type: str,
+    budget: str,
+    customer_type: str,
+    competition_tolerance: str,
+    area_name: str,
+    pincode: str,
+    decision_snapshot: dict,
+):
+    ensure_session_table(client)
+    rows = [{
+        "session_id": f"{business_type}-{decision_snapshot['lead_market']}-{budget}-{customer_type}",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "business_type": business_type,
+        "budget": budget,
+        "customer_type": customer_type,
+        "competition_tolerance": competition_tolerance,
+        "area_name": area_name,
+        "pincode": pincode,
+        "lead_market": decision_snapshot.get("lead_market", ""),
+        "launch_thesis": decision_snapshot.get("launch_thesis", ""),
+        "risk_watch": decision_snapshot.get("risk_watch", ""),
+        "next_milestone": decision_snapshot.get("next_milestone", ""),
+    }]
+    client.insert_rows_json(SESSION_TABLE, rows)
+
+
+@app.get("/recent-sessions")
+async def recent_sessions():
+    client = bigquery.Client(project=PROJECT_ID)
+    ensure_session_table(client)
+    query = f"""
+    SELECT
+      created_at,
+      business_type,
+      budget,
+      customer_type,
+      lead_market,
+      risk_watch,
+      next_milestone
+    FROM `{SESSION_TABLE}`
+    ORDER BY created_at DESC
+    LIMIT 5
+    """
+    rows = list(client.query(query).result())
+    return JSONResponse({
+        "sessions": [
+            {
+                "created_at": str(row.created_at),
+                "business_type": row.business_type,
+                "budget": row.budget,
+                "customer_type": row.customer_type,
+                "lead_market": row.lead_market,
+                "risk_watch": row.risk_watch,
+                "next_milestone": row.next_milestone,
+            }
+            for row in rows
+        ]
+    })
+
+
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
     return templates.TemplateResponse(request, "index.html", {})
@@ -398,6 +483,16 @@ async def recommend(
         display_name,
         customer_type,
         competition_tolerance,
+    )
+    save_expansion_session(
+        client,
+        business_type,
+        budget,
+        customer_type,
+        competition_tolerance,
+        area_name,
+        pincode,
+        decision_snapshot,
     )
 
     return JSONResponse({
