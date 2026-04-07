@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>LeaseLens AI Engine Details</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <main class="shell">
+    <section class="hero compact-hero">
+      <div class="hero-copy">
+        <p class="eyebrow">Decision Engine Details</p>
+        <h1>How LeaseLens Works</h1>
+        <p class="subhead">
+          LeaseLens combines location scoring, customer-fit analysis, and launch planning to turn a retail brief into a shortlist and an execution path.
+        </p>
+      </div>
+      <div class="hero-card">
+        <p class="hero-card-label">Live System</p>
+        <p class="hero-card-value">BigQuery-backed retail intelligence, weighted evaluation, and planning output in one workflow.</p>
+      </div>
+    </section>
+
+    <section class="panel stack-panel">
+      <div class="section-head">
+        <h2>Evaluation Flow</h2>
+        <p>This page exists for reviewers who want to inspect the orchestration and scoring logic behind the recommendation output.</p>
+      </div>
+      <div class="agent-strip">
+        <article class="agent-card">
+          <p class="agent-card-label">Stage 1</p>
+          <h3>Brief Intake</h3>
+          <p>The coordinator converts business type, budget, target customer, and area constraints into a structured evaluation request.</p>
+        </article>
+        <article class="agent-card">
+          <p class="agent-card-label">Stage 2</p>
+          <h3>Location Intelligence</h3>
+          <p>BigQuery tables score Bangalore micro-markets using demand, accessibility, market intensity, and positioning cues.</p>
+        </article>
+        <article class="agent-card">
+          <p class="agent-card-label">Stage 3</p>
+          <h3>Customer Fit</h3>
+          <p>The shortlist is interpreted through customer-fit and commercial risk signals so the recommendation reflects the business brief.</p>
+        </article>
+        <article class="agent-card">
+          <p class="agent-card-label">Stage 4</p>
+          <h3>Launch Planning</h3>
+          <p>The final output becomes an action plan with milestone, checklist, and validation steps rather than a static ranked list.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="section-head">
+        <h2>Data Sources</h2>
+        <p>LeaseLens relies on structured tables instead of prompt-only outputs.</p>
+      </div>
+      <div class="workflow-grid">
+        <article class="workflow-card">
+          <p class="workflow-label">Area Scores</p>
+          <p><code>area_live_scores_serving</code> provides the cleaned serving-layer view of Bangalore market candidates.</p>
+        </article>
+        <article class="workflow-card">
+          <p class="workflow-label">Business Profiles</p>
+          <p><code>business_profiles</code> provides the display label, fit text, and positioning used to contextualize each recommendation.</p>
+        </article>
+        <article class="workflow-card">
+          <p class="workflow-label">Rendered Output</p>
+          <p>The UI converts those signals into shortlist cards, decision snapshot, execution plan, and Google Maps handoff.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="section-head">
+        <h2>What Reviewers Should Notice</h2>
+        <p>The system is intentionally designed to feel like a practical expansion copilot instead of an academic workflow visual.</p>
+      </div>
+      <div class="workflow-grid">
+        <article class="workflow-card">
+          <p class="workflow-label">Real Product Surface</p>
+          <p>The main app focuses on decision making, not architecture jargon, so the user experience stays credible.</p>
+        </article>
+        <article class="workflow-card">
+          <p class="workflow-label">Explainable Logic</p>
+          <p>Recommendation cards and decision snapshot expose the underlying tradeoffs without forcing users through a technical dashboard.</p>
+        </article>
+        <article class="workflow-card">
+          <p class="workflow-label">Optional Transparency</p>
+          <p>This details page gives judges and reviewers a direct way to inspect the orchestration layer only when they want it.</p>
+        </article>
+      </div>
+      <p class="details-backlink"><a href="/">Back to main product experience</a></p>
+    </section>
+  </main>
+</body>
+</html>

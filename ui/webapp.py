@@ -212,6 +212,11 @@ async def home(request: Request):
     return templates.TemplateResponse(request, "index.html", {})
 
 
+@app.get("/engine-details", response_class=HTMLResponse)
+async def engine_details(request: Request):
+    return templates.TemplateResponse(request, "engine_details.html", {})
+
+
 @app.get("/area-suggestions")
 async def area_suggestions(q: str = Query("", min_length=0, max_length=50)):
     client = bigquery.Client(project=PROJECT_ID)
@@ -388,13 +393,6 @@ async def recommend(
         })
 
     execution_plan = build_execution_plan(recommendations, display_name, customer_type, budget)
-    agent_workflow = build_agent_workflow(
-        recommendations,
-        display_name,
-        customer_type,
-        budget,
-        competition_tolerance,
-    )
     decision_snapshot = build_decision_snapshot(
         recommendations,
         display_name,
@@ -410,7 +408,6 @@ async def recommend(
             f"site rationale, and next-step workflow for this retail decision."
         ),
         "recommendations": recommendations,
-        "agent_workflow": agent_workflow,
         "decision_snapshot": decision_snapshot,
         "execution_plan": execution_plan,
     })

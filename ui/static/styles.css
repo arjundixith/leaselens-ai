@@ -88,6 +88,24 @@ body {
   line-height: 1.5;
 }
 
+.details-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 18px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(15, 118, 110, 0.16);
+  color: var(--accent-strong);
+  background: rgba(15, 118, 110, 0.06);
+  text-decoration: none;
+  font-weight: 700;
+}
+
+.details-link:hover {
+  background: rgba(15, 118, 110, 0.1);
+}
+
 .panel {
   margin-top: 24px;
   padding: 24px;
@@ -96,12 +114,6 @@ body {
   background: var(--panel);
   box-shadow: var(--shadow);
   backdrop-filter: blur(8px);
-}
-
-.stack-panel {
-  background:
-    linear-gradient(180deg, rgba(255,255,255,0.95), rgba(252,247,240,0.95)),
-    radial-gradient(circle at top right, rgba(15, 118, 110, 0.08), transparent 30%);
 }
 
 .section-head h2 {
@@ -120,41 +132,6 @@ body {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 18px;
-}
-
-.agent-strip {
-  margin-top: 22px;
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 16px;
-}
-
-.agent-card {
-  border: 1px solid var(--line);
-  border-radius: 20px;
-  background: rgba(255, 255, 255, 0.94);
-  padding: 18px;
-  box-shadow: 0 14px 30px rgba(31, 26, 22, 0.08);
-}
-
-.agent-card-label {
-  margin: 0 0 10px;
-  color: var(--accent);
-  font-size: 12px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-}
-
-.agent-card h3 {
-  margin: 0 0 10px;
-  font-size: 22px;
-}
-
-.agent-card p:last-child {
-  margin: 0;
-  color: var(--muted);
-  line-height: 1.6;
 }
 
 label span {
@@ -265,77 +242,34 @@ button:hover {
   line-height: 1.45;
 }
 
-.trace-head {
-  margin-top: 24px;
-}
-
-.trace-head h4 {
-  margin: 0;
-  font-size: 24px;
-}
-
-.trace-head p {
-  margin: 8px 0 0;
-  color: var(--muted);
-}
-
-.agent-trace-grid {
-  margin-top: 16px;
-  display: grid;
-  gap: 14px;
-}
-
-.agent-trace-card {
-  border: 1px solid var(--line);
-  border-radius: 18px;
-  background: #fff;
-  padding: 18px;
-}
-
-.agent-trace-top {
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  align-items: start;
-}
-
-.agent-trace-label {
-  margin: 0 0 8px;
-  color: var(--warm);
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  font-weight: 700;
-}
-
-.agent-trace-top h4 {
-  margin: 0;
-  font-size: 22px;
-}
-
-.agent-chip {
-  display: inline-flex;
-  max-width: 360px;
-  padding: 8px 12px;
-  border-radius: 999px;
-  background: rgba(15, 118, 110, 0.09);
-  color: var(--accent-strong);
-  font-size: 13px;
-  font-weight: 700;
-  line-height: 1.4;
-}
-
-.agent-trace-copy {
-  margin: 14px 0 0;
-  color: var(--muted);
-  line-height: 1.7;
-}
-
 .copilot-summary {
   margin: 10px 0 0;
   max-width: 860px;
   color: var(--muted);
   line-height: 1.7;
+}
+
+.details-row {
+  margin-top: 18px;
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.95);
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+}
+
+.details-row p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.inline-link {
+  margin-top: 0;
+  white-space: nowrap;
 }
 
 .result-card {
@@ -512,15 +446,18 @@ select:disabled {
     grid-template-columns: 1fr;
   }
 
-  .agent-strip,
   .grid,
   .snapshot-grid,
   .result-grid,
   .result-top,
-  .agent-trace-top,
   .workflow-grid {
     grid-template-columns: 1fr;
     display: grid;
+  }
+
+  .details-row {
+    flex-direction: column;
+    align-items: start;
   }
 
   .shell {

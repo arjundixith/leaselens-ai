@@ -10,44 +10,16 @@
   <main class="shell">
     <section class="hero">
       <div class="hero-copy">
-        <p class="eyebrow">Multi-Agent Retail Expansion Assistant</p>
+        <p class="eyebrow">Retail Expansion Copilot</p>
         <h1>LeaseLens AI</h1>
         <p class="subhead">
           Evaluate Bangalore areas, compare expansion options, and turn location insight into next-step action plans for your retail rollout.
         </p>
       </div>
       <div class="hero-card">
-        <p class="hero-card-label">Agent Workflow</p>
-        <p class="hero-card-value">Coordinator, location intelligence, and planning copilots working together for Bangalore retail expansion.</p>
-      </div>
-    </section>
-
-    <section class="panel stack-panel">
-      <div class="section-head">
-        <h2>Agent Stack</h2>
-        <p>LeaseLens uses a visible four-agent workflow so the recommendation is clearly broken into planning, scoring, customer-fit, and execution.</p>
-      </div>
-      <div class="agent-strip">
-        <article class="agent-card">
-          <p class="agent-card-label">Agent 1</p>
-          <h3>Coordinator</h3>
-          <p>Converts the brief into a structured retail expansion workflow.</p>
-        </article>
-        <article class="agent-card">
-          <p class="agent-card-label">Agent 2</p>
-          <h3>Location Intelligence</h3>
-          <p>Ranks Bangalore zones using demand, accessibility, and market quality.</p>
-        </article>
-        <article class="agent-card">
-          <p class="agent-card-label">Agent 3</p>
-          <h3>Customer Fit</h3>
-          <p>Matches locality behavior to the target customer and business profile.</p>
-        </article>
-        <article class="agent-card">
-          <p class="agent-card-label">Agent 4</p>
-          <h3>Launch Planner</h3>
-          <p>Turns the shortlist into a next-step plan, decision checklist, and rollout actions.</p>
-        </article>
+        <p class="hero-card-label">Decision Engine</p>
+        <p class="hero-card-value">BigQuery-backed location scoring, shortlist comparison, and launch planning built for Bangalore retail expansion.</p>
+        <a class="details-link" href="/engine-details" target="_blank" rel="noopener noreferrer">View engine details</a>
       </div>
     </section>
 
@@ -278,19 +250,6 @@
         </article>
       `).join('');
 
-      const workflowCards = (data.agent_workflow || []).map(agent => `
-        <article class="agent-trace-card">
-          <div class="agent-trace-top">
-            <div>
-              <p class="agent-trace-label">${agent.status}</p>
-              <h4>${agent.name}</h4>
-            </div>
-            <span class="agent-chip">${agent.mission}</span>
-          </div>
-          <p class="agent-trace-copy">${agent.finding}</p>
-        </article>
-      `).join('');
-
       const nextSteps = (data.execution_plan?.next_steps || []).map(step => `<li>${step}</li>`).join('');
       const checklist = (data.execution_plan?.decision_checklist || []).map(step => `<li>${step}</li>`).join('');
 
@@ -318,11 +277,10 @@
             <h4>${data.decision_snapshot?.next_milestone || ''}</h4>
           </article>
         </div>
-        <div class="trace-head">
-          <h4>Agent Coordination Board</h4>
-          <p>Each agent contributes a visible piece of the retail expansion decision.</p>
+        <div class="details-row">
+          <p>Need to review the orchestration and scoring logic behind this recommendation?</p>
+          <a class="details-link inline-link" href="/engine-details" target="_blank" rel="noopener noreferrer">Open engine details</a>
         </div>
-        <div class="agent-trace-grid">${workflowCards}</div>
         <div class="results-list">${cards}</div>
         <div class="workflow-grid">
           <article class="workflow-card">
