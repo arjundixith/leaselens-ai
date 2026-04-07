@@ -22,11 +22,17 @@ def clean_pincode(value: str) -> str:
     return "".join(ch for ch in str(value or "") if ch.isdigit())[:6]
 
 
+def read_value(record, key: str, default=0):
+    if isinstance(record, dict):
+        return record.get(key, default)
+    return getattr(record, key, default)
+
+
 def commercial_intensity(row) -> str:
     score = (
-        float(row.mall_count or 0) * 1.3
-        + float(row.office_count or 0) * 1.1
-        + float(row.metro_count or 0) * 0.9
+        float(read_value(row, "mall_count", 0) or 0) * 1.3
+        + float(read_value(row, "office_count", 0) or 0) * 1.1
+        + float(read_value(row, "metro_count", 0) or 0) * 0.9
     )
     if score >= 22:
         return "High"
@@ -37,9 +43,9 @@ def commercial_intensity(row) -> str:
 
 def accessibility_band(row) -> str:
     avg_time = (
-        float(row.traffic_minutes_to_mg_road or 0)
-        + float(row.traffic_minutes_to_koramangala or 0)
-        + float(row.traffic_minutes_to_whitefield or 0)
+        float(read_value(row, "traffic_minutes_to_mg_road", 0) or 0)
+        + float(read_value(row, "traffic_minutes_to_koramangala", 0) or 0)
+        + float(read_value(row, "traffic_minutes_to_whitefield", 0) or 0)
     ) / 3.0
     if avg_time <= 22:
         return "excellent"
@@ -83,7 +89,7 @@ def build_summary(row, display_name: str, fit_text: str, positioning_hint: str) 
 
 
 def market_strength_label(row) -> str:
-    score = float(row.final_score or 0)
+    score = float(read_value(row, "final_score", 0) or 0)
     if score >= 78:
         return "high-conviction"
     if score >= 62:
