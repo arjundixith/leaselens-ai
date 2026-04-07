@@ -2,8 +2,8 @@ import os
 import dotenv
 import google.auth
 import google.auth.transport.requests
-from google.adk.tools.mcp_tool.mcp_toolset import MCPToolset
-from google.adk.tools.mcp_tool.mcp_session_manager import StreamableHTTPConnectionParams
+from google.adk.tools.mcp_tool import McpToolset
+from google.adk.tools.mcp_tool.mcp_session_manager import StreamableHTTPServerParams
 
 MAPS_MCP_URL = "https://mapstools.googleapis.com/mcp"
 BIGQUERY_MCP_URL = "https://bigquery.googleapis.com/mcp"
@@ -13,8 +13,8 @@ def get_maps_mcp_toolset():
     dotenv.load_dotenv()
     maps_api_key = os.getenv("MAPS_API_KEY", "")
 
-    return MCPToolset(
-        connection_params=StreamableHTTPConnectionParams(
+    return McpToolset(
+        connection_params=StreamableHTTPServerParams(
             url=MAPS_MCP_URL,
             headers={
                 "X-Goog-Api-Key": maps_api_key,
@@ -30,8 +30,8 @@ def get_bigquery_mcp_toolset():
     credentials.refresh(google.auth.transport.requests.Request())
     oauth_token = credentials.token
 
-    return MCPToolset(
-        connection_params=StreamableHTTPConnectionParams(
+    return McpToolset(
+        connection_params=StreamableHTTPServerParams(
             url=BIGQUERY_MCP_URL,
             headers={
                 "Authorization": f"Bearer {oauth_token}",
