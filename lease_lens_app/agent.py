@@ -143,12 +143,9 @@ Response format:
   - shortlist validation steps
   - decision checklist
 - Keep it concise, polished, and investor/demo ready
-""",
+    """,
     tools=[bigquery_toolset, maps_toolset],
     sub_agents=[
         expansion_workflow_agent,
-        location_intelligence_agent,
-        customer_fit_agent,
-        launch_planner_agent,
     ],
 )
