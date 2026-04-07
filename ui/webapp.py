@@ -82,6 +82,42 @@ def build_summary(row, display_name: str, fit_text: str, positioning_hint: str) 
     )
 
 
+def market_strength_label(row) -> str:
+    score = float(row.final_score or 0)
+    if score >= 78:
+        return "high-conviction"
+    if score >= 62:
+        return "promising"
+    return "watchlist"
+
+
+def build_execution_plan(recommendations, display_name: str, customer_type: str, budget: str):
+    lead = recommendations[0]
+    area_label = f"{lead['area_name']} ({lead['pincode']})"
+    return {
+        "coordinator_brief": (
+            f"The coordinator agent shortlisted {len(recommendations)} Bangalore options for a "
+            f"{budget} budget {display_name.lower()} and is prioritizing {area_label} as the lead expansion zone."
+        ),
+        "intelligence_focus": (
+            f"The location intelligence agent found that {lead['area_name']} offers the best balance of demand, "
+            f"accessibility, and market intensity for {customer_type.lower()}."
+        ),
+        "next_steps": [
+            f"Validate {area_label} with a broker shortlist and one on-ground site visit this week.",
+            f"Compare rent, frontage, and walk-in visibility across the top {len(recommendations)} shortlisted areas.",
+            f"Build a launch P&L for a {display_name.lower()} in {lead['area_name']} using the {budget.lower()} budget assumption.",
+            f"Prepare a neighborhood-specific offer mix for {customer_type.lower()} before the final site decision.",
+        ],
+        "decision_checklist": [
+            "Confirm target rent range and deposit ceiling.",
+            "Verify frontage, parking, and peak-footfall windows.",
+            "Check nearby anchors such as malls, offices, schools, and metro exits.",
+            "Review licensing, staffing, and launch timeline assumptions before locking the site.",
+        ],
+    }
+
+
 def valid_area_clause() -> str:
     return """
     area_name IS NOT NULL
@@ -263,6 +299,7 @@ async def recommend(
             "positioning": positioning_hint,
             "final_score": row.final_score,
             "market_intensity": commercial_intensity(row),
+            "market_strength": market_strength_label(row),
             "mall_count": row.mall_count,
             "office_count": row.office_count,
             "school_count": row.school_count,
@@ -273,8 +310,15 @@ async def recommend(
             "maps_url": maps_url,
         })
 
+    execution_plan = build_execution_plan(recommendations, display_name, customer_type, budget)
+
     return JSONResponse({
-        "title": f"LeaseLens AI Recommendations for a {budget} budget {display_name} in Bangalore",
+        "title": f"LeaseLens AI Expansion Plan for a {budget} budget {display_name} in Bangalore",
         "subtitle": f"Target customer: {customer_type} | Competition tolerance: {competition_tolerance}",
+        "copilot_summary": (
+            f"LeaseLens AI coordinated location intelligence and expansion planning to produce a shortlist, "
+            f"site rationale, and next-step workflow for this retail decision."
+        ),
         "recommendations": recommendations,
+        "execution_plan": execution_plan,
     })

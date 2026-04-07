@@ -10,22 +10,22 @@
   <main class="shell">
     <section class="hero">
       <div class="hero-copy">
-        <p class="eyebrow">Retail Expansion Intelligence</p>
+        <p class="eyebrow">Multi-Agent Retail Expansion Assistant</p>
         <h1>LeaseLens AI</h1>
         <p class="subhead">
-          Evaluate Bangalore areas and pincodes for your next retail outlet using AI-powered location intelligence.
+          Evaluate Bangalore areas, compare expansion options, and turn location insight into next-step action plans for your retail rollout.
         </p>
       </div>
       <div class="hero-card">
-        <p class="hero-card-label">Built for</p>
-        <p class="hero-card-value">Bakery, Cafe, Pharmacy, Salon, Grocery, Boutique, Clinic</p>
+        <p class="hero-card-label">Agent Workflow</p>
+        <p class="hero-card-value">Coordinator, location intelligence, and planning copilots working together for Bangalore retail expansion.</p>
       </div>
     </section>
 
     <section class="panel form-panel">
       <div class="section-head">
         <h2>Business Inputs</h2>
-        <p>Enter your business profile to generate tailored Bangalore retail recommendations.</p>
+        <p>Enter your expansion brief to generate a location shortlist and a next-step execution plan.</p>
       </div>
 
       <form id="recommend-form" novalidate>
@@ -96,16 +96,16 @@
         <p class="helper">Fields marked with * are required. Use either Preferred Area or Bangalore Pincode. Leave both blank for city-wide recommendations.</p>
         <p id="form-error" class="form-error" hidden></p>
 
-        <button type="submit">Generate Recommendations</button>
+        <button type="submit">Generate Expansion Plan</button>
       </form>
     </section>
 
     <section class="panel output-panel">
       <div class="section-head">
-        <h2>Recommendations</h2>
-        <p>Decision-ready location guidance for Bangalore retail expansion.</p>
+        <h2>Expansion Copilot Output</h2>
+        <p>Shortlist, rationale, and action guidance for Bangalore retail expansion.</p>
       </div>
-      <div id="answer" class="results-empty">Enter your business requirements to generate recommendations.</div>
+      <div id="answer" class="results-empty">Enter your business requirements to generate an expansion plan.</div>
     </section>
   </main>
 
@@ -237,6 +237,7 @@
             </div>
             <div class="score-chip">Score ${item.final_score}</div>
           </div>
+          <p class="result-badge">Market signal: ${item.market_strength}</p>
           <p class="result-summary">${item.summary}</p>
           <div class="result-grid">
             <div><strong>Demand</strong><br>Malls ${item.mall_count}, Offices ${item.office_count}, Schools ${item.school_count}, Metro ${item.metro_count}</div>
@@ -248,12 +249,31 @@
         </article>
       `).join('');
 
+      const nextSteps = (data.execution_plan?.next_steps || []).map(step => `<li>${step}</li>`).join('');
+      const checklist = (data.execution_plan?.decision_checklist || []).map(step => `<li>${step}</li>`).join('');
+
       answer.innerHTML = `
         <div class="results-head">
           <h3>${data.title}</h3>
           <p>${data.subtitle}</p>
+          <p class="copilot-summary">${data.copilot_summary || ''}</p>
         </div>
         <div class="results-list">${cards}</div>
+        <div class="workflow-grid">
+          <article class="workflow-card">
+            <p class="workflow-label">Coordinator Brief</p>
+            <p>${data.execution_plan?.coordinator_brief || ''}</p>
+            <p class="workflow-note">${data.execution_plan?.intelligence_focus || ''}</p>
+          </article>
+          <article class="workflow-card">
+            <p class="workflow-label">Next-Step Plan</p>
+            <ol class="workflow-list">${nextSteps}</ol>
+          </article>
+          <article class="workflow-card">
+            <p class="workflow-label">Decision Checklist</p>
+            <ul class="workflow-list checklist">${checklist}</ul>
+          </article>
+        </div>
       `;
     }
 
@@ -290,7 +310,7 @@
         return;
       }
 
-      answer.innerHTML = '<div class="results-empty">Generating recommendations...</div>';
+      answer.innerHTML = '<div class="results-empty">Generating your expansion shortlist and action plan...</div>';
 
       try {
         const response = await fetch('/recommend', {
