@@ -23,7 +23,7 @@ steps:
       - asia-south1
       - --allow-unauthenticated
       - --set-env-vars
-      - GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GOOGLE_CLOUD_LOCATION=asia-south1,GOOGLE_GENAI_USE_VERTEXAI=true
+      - GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GOOGLE_CLOUD_LOCATION=global,GOOGLE_GENAI_USE_VERTEXAI=true
 
 images:
   - asia-south1-docker.pkg.dev/$PROJECT_ID/lease-lens-repo/lease-lens-ai:$COMMIT_SHA
