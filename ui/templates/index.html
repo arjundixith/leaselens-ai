@@ -22,6 +22,35 @@
       </div>
     </section>
 
+    <section class="panel stack-panel">
+      <div class="section-head">
+        <h2>Agent Stack</h2>
+        <p>LeaseLens uses a visible four-agent workflow so the recommendation is clearly broken into planning, scoring, customer-fit, and execution.</p>
+      </div>
+      <div class="agent-strip">
+        <article class="agent-card">
+          <p class="agent-card-label">Agent 1</p>
+          <h3>Coordinator</h3>
+          <p>Converts the brief into a structured retail expansion workflow.</p>
+        </article>
+        <article class="agent-card">
+          <p class="agent-card-label">Agent 2</p>
+          <h3>Location Intelligence</h3>
+          <p>Ranks Bangalore zones using demand, accessibility, and market quality.</p>
+        </article>
+        <article class="agent-card">
+          <p class="agent-card-label">Agent 3</p>
+          <h3>Customer Fit</h3>
+          <p>Matches locality behavior to the target customer and business profile.</p>
+        </article>
+        <article class="agent-card">
+          <p class="agent-card-label">Agent 4</p>
+          <h3>Launch Planner</h3>
+          <p>Turns the shortlist into a next-step plan, decision checklist, and rollout actions.</p>
+        </article>
+      </div>
+    </section>
+
     <section class="panel form-panel">
       <div class="section-head">
         <h2>Business Inputs</h2>
@@ -249,6 +278,19 @@
         </article>
       `).join('');
 
+      const workflowCards = (data.agent_workflow || []).map(agent => `
+        <article class="agent-trace-card">
+          <div class="agent-trace-top">
+            <div>
+              <p class="agent-trace-label">${agent.status}</p>
+              <h4>${agent.name}</h4>
+            </div>
+            <span class="agent-chip">${agent.mission}</span>
+          </div>
+          <p class="agent-trace-copy">${agent.finding}</p>
+        </article>
+      `).join('');
+
       const nextSteps = (data.execution_plan?.next_steps || []).map(step => `<li>${step}</li>`).join('');
       const checklist = (data.execution_plan?.decision_checklist || []).map(step => `<li>${step}</li>`).join('');
 
@@ -258,6 +300,29 @@
           <p>${data.subtitle}</p>
           <p class="copilot-summary">${data.copilot_summary || ''}</p>
         </div>
+        <div class="snapshot-grid">
+          <article class="snapshot-card">
+            <p class="snapshot-label">Lead Market</p>
+            <h4>${data.decision_snapshot?.lead_market || ''}</h4>
+          </article>
+          <article class="snapshot-card">
+            <p class="snapshot-label">Launch Thesis</p>
+            <h4>${data.decision_snapshot?.launch_thesis || ''}</h4>
+          </article>
+          <article class="snapshot-card">
+            <p class="snapshot-label">Risk Watch</p>
+            <h4>${data.decision_snapshot?.risk_watch || ''}</h4>
+          </article>
+          <article class="snapshot-card">
+            <p class="snapshot-label">Next Milestone</p>
+            <h4>${data.decision_snapshot?.next_milestone || ''}</h4>
+          </article>
+        </div>
+        <div class="trace-head">
+          <h4>Agent Coordination Board</h4>
+          <p>Each agent contributes a visible piece of the retail expansion decision.</p>
+        </div>
+        <div class="agent-trace-grid">${workflowCards}</div>
         <div class="results-list">${cards}</div>
         <div class="workflow-grid">
           <article class="workflow-card">

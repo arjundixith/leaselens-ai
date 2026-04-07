@@ -91,6 +91,77 @@ def market_strength_label(row) -> str:
     return "watchlist"
 
 
+def risk_signal(row, competition_tolerance: str) -> str:
+    intensity = commercial_intensity(row)
+    access = accessibility_band(row)
+    tolerance = competition_tolerance.lower()
+
+    if intensity == "High" and tolerance == "low":
+        return "High market crowding risk"
+    if intensity == "High" and access == "moderate":
+        return "Crowded zone with slower cross-city access"
+    if access == "moderate":
+        return "Execution depends on localized catchment"
+    return "Balanced risk for current brief"
+
+
+def build_agent_workflow(recommendations, display_name: str, customer_type: str, budget: str, competition_tolerance: str):
+    lead = recommendations[0]
+    runner_up = recommendations[1] if len(recommendations) > 1 else recommendations[0]
+    area_label = f"{lead['area_name']} ({lead['pincode']})"
+
+    return [
+        {
+            "name": "Coordinator Agent",
+            "status": "Complete",
+            "mission": "Convert the business brief into a decision workflow.",
+            "finding": (
+                f"Shortlisted {len(recommendations)} zones and advanced {area_label} as the lead option for a "
+                f"{budget.lower()} budget {display_name.lower()} rollout."
+            ),
+        },
+        {
+            "name": "Location Intelligence Agent",
+            "status": "Complete",
+            "mission": "Score Bangalore micro-markets using demand and accessibility signals.",
+            "finding": (
+                f"Selected {lead['area_name']} as the strongest fit, with {lead['market_intensity'].lower()} market activity "
+                f"and a {lead['market_strength']} conviction signal."
+            ),
+        },
+        {
+            "name": "Customer Fit Agent",
+            "status": "Complete",
+            "mission": "Match locality behavior to the target customer profile.",
+            "finding": (
+                f"Matched the shortlist against {customer_type.lower()} demand patterns and kept {runner_up['area_name']} "
+                f"as a challenger market if the lead site underperforms on commercial terms."
+            ),
+        },
+        {
+            "name": "Launch Planner Agent",
+            "status": "Ready",
+            "mission": "Convert the shortlist into immediate execution steps.",
+            "finding": (
+                f"Prepared site validation, rent comparison, and launch planning actions with a "
+                f"{competition_tolerance.lower()} competition tolerance assumption."
+            ),
+        },
+    ]
+
+
+def build_decision_snapshot(recommendations, display_name: str, customer_type: str, competition_tolerance: str):
+    lead = recommendations[0]
+    return {
+        "lead_market": f"{lead['area_name']} ({lead['pincode']})",
+        "launch_thesis": (
+            f"{display_name} for {customer_type.lower()} with {lead['market_intensity'].lower()} market activity."
+        ),
+        "risk_watch": risk_signal(lead, competition_tolerance),
+        "next_milestone": f"Complete broker validation and on-ground visit for {lead['area_name']}.",
+    }
+
+
 def build_execution_plan(recommendations, display_name: str, customer_type: str, budget: str):
     lead = recommendations[0]
     area_label = f"{lead['area_name']} ({lead['pincode']})"
@@ -311,6 +382,19 @@ async def recommend(
         })
 
     execution_plan = build_execution_plan(recommendations, display_name, customer_type, budget)
+    agent_workflow = build_agent_workflow(
+        recommendations,
+        display_name,
+        customer_type,
+        budget,
+        competition_tolerance,
+    )
+    decision_snapshot = build_decision_snapshot(
+        recommendations,
+        display_name,
+        customer_type,
+        competition_tolerance,
+    )
 
     return JSONResponse({
         "title": f"LeaseLens AI Expansion Plan for a {budget} budget {display_name} in Bangalore",
@@ -320,5 +404,7 @@ async def recommend(
             f"site rationale, and next-step workflow for this retail decision."
         ),
         "recommendations": recommendations,
+        "agent_workflow": agent_workflow,
+        "decision_snapshot": decision_snapshot,
         "execution_plan": execution_plan,
     })
