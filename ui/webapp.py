@@ -80,25 +80,23 @@ async def area_suggestions(q: str = Query("", min_length=0, max_length=50)):
 
     if q:
         query = f"""
-        SELECT area_name
+        SELECT DISTINCT area_name
         FROM `{AREA_TABLE}`
         WHERE {valid_area_clause()}
-          AND LOWER(area_name) LIKE LOWER(@query)
-        QUALIFY ROW_NUMBER() OVER (PARTITION BY LOWER(area_name) ORDER BY scored_at DESC, final_score DESC) = 1
+          AND STARTS_WITH(LOWER(area_name), LOWER(@query))
         ORDER BY area_name
         LIMIT 8
         """
         cfg = bigquery.QueryJobConfig(
-            query_parameters=[bigquery.ScalarQueryParameter("query", "STRING", f"%{q}%")]
+            query_parameters=[bigquery.ScalarQueryParameter("query", "STRING", q)]
         )
         rows = list(client.query(query, job_config=cfg).result())
     else:
         query = f"""
-        SELECT area_name
+        SELECT DISTINCT area_name
         FROM `{AREA_TABLE}`
         WHERE {valid_area_clause()}
-        QUALIFY ROW_NUMBER() OVER (PARTITION BY LOWER(area_name) ORDER BY scored_at DESC, final_score DESC) = 1
-        ORDER BY area_name
+        ORDER BY final_score DESC, area_name
         LIMIT 8
         """
         rows = list(client.query(query).result())

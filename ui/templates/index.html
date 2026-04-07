@@ -120,9 +120,20 @@
 
     const areaSuggestions = document.getElementById('area-suggestions');
     const pincodeSuggestions = document.getElementById('pincode-suggestions');
+    const suggestionCache = new Map();
+    let areaAbortController = null;
+    let pincodeAbortController = null;
 
     function cleanPincode(value) {
       return String(value || '').replace(/\D/g, '').slice(0, 6);
+    }
+
+    function debounce(fn, delay = 250) {
+      let timer = null;
+      return (...args) => {
+        window.clearTimeout(timer);
+        timer = window.setTimeout(() => fn(...args), delay);
+      };
     }
 
     function resetError() {
@@ -147,11 +158,25 @@
       }
     }
 
-    async function loadSuggestions(url, container, key, query) {
-      const response = await fetch(`${url}?q=${encodeURIComponent(query)}`);
+    async function loadSuggestions(url, container, key, query, controller) {
+      const cacheKey = `${key}:${query.toLowerCase()}`;
+      if (suggestionCache.has(cacheKey)) {
+        const items = suggestionCache.get(cacheKey);
+        renderSuggestions(container, items);
+        return;
+      }
+
+      const response = await fetch(`${url}?q=${encodeURIComponent(query)}`, {
+        signal: controller?.signal,
+      });
       const data = await response.json();
       const items = data[key] || [];
+      suggestionCache.set(cacheKey, items);
 
+      renderSuggestions(container, items);
+    }
+
+    function renderSuggestions(container, items) {
       if (!items.length) {
         container.hidden = true;
         container.innerHTML = '';
@@ -164,42 +189,57 @@
       container.hidden = false;
     }
 
-    areaInput.addEventListener('input', async () => {
+    const handleAreaInput = debounce(async () => {
       resetError();
       updateMutualExclusion();
 
       const query = areaInput.value.trim();
-      if (!query || areaInput.disabled) {
+      if (!query || areaInput.disabled || query.length < 2) {
         areaSuggestions.hidden = true;
         areaSuggestions.innerHTML = '';
         return;
       }
 
+      if (areaAbortController) {
+        areaAbortController.abort();
+      }
+      areaAbortController = new AbortController();
+
       try {
-        await loadSuggestions('/area-suggestions', areaSuggestions, 'areas', query);
-      } catch {
+        await loadSuggestions('/area-suggestions', areaSuggestions, 'areas', query, areaAbortController);
+      } catch (error) {
+        if (error.name === 'AbortError') return;
         areaSuggestions.hidden = true;
       }
-    });
+    }, 220);
 
-    pincodeInput.addEventListener('input', async () => {
+    const handlePincodeInput = debounce(async () => {
       resetError();
       pincodeInput.value = cleanPincode(pincodeInput.value);
       updateMutualExclusion();
 
       const query = pincodeInput.value.trim();
-      if (!query || pincodeInput.disabled) {
+      if (!query || pincodeInput.disabled || query.length < 2) {
         pincodeSuggestions.hidden = true;
         pincodeSuggestions.innerHTML = '';
         return;
       }
 
+      if (pincodeAbortController) {
+        pincodeAbortController.abort();
+      }
+      pincodeAbortController = new AbortController();
+
       try {
-        await loadSuggestions('/pincode-suggestions', pincodeSuggestions, 'pincodes', query);
-      } catch {
+        await loadSuggestions('/pincode-suggestions', pincodeSuggestions, 'pincodes', query, pincodeAbortController);
+      } catch (error) {
+        if (error.name === 'AbortError') return;
         pincodeSuggestions.hidden = true;
       }
-    });
+    }, 180);
+
+    areaInput.addEventListener('input', handleAreaInput);
+    pincodeInput.addEventListener('input', handlePincodeInput);
 
     areaSuggestions.addEventListener('click', (event) => {
       const button = event.target.closest('.suggestion-item');
