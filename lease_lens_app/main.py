@@ -1,25 +1,18 @@
-import json
 import os
-import re
 from datetime import datetime, timezone
 from typing import Any
+from urllib.parse import quote_plus
 from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
-from google.adk.memory import InMemoryMemoryService
-from google.adk.runners import Runner
-from google.adk.sessions import InMemorySessionService
 from google.cloud import bigquery
-from google.genai.types import Content, Part
 from pydantic import BaseModel
 
-from .agent import build_root_agent
-
 PROJECT_ID = os.getenv("GOOGLE_CLOUD_PROJECT", "learn-mcp-490919")
+AREA_TABLE = f"{PROJECT_ID}.lease_lens.area_live_scores_serving"
+PROFILE_TABLE = f"{PROJECT_ID}.lease_lens.business_profiles"
 SESSION_TABLE = f"{PROJECT_ID}.lease_lens.expansion_sessions"
-APP_NAME = "lease_lens_ai"
-USER_ID = "lease_lens_ui"
 
 app = FastAPI(title="LeaseLens AI Backend")
 
@@ -31,6 +24,148 @@ class RecommendationRequest(BaseModel):
     pincode: str = ""
     customer_type: str
     competition_tolerance: str
+
+
+def clean_pincode(value: str) -> str:
+    return "".join(ch for ch in str(value or "") if ch.isdigit())[:6]
+
+
+def commercial_intensity(row) -> str:
+    score = (
+        float(row.mall_count or 0) * 1.3
+        + float(row.office_count or 0) * 1.1
+        + float(row.metro_count or 0) * 0.9
+    )
+    if score >= 22:
+        return "High"
+    if score >= 12:
+        return "Medium"
+    return "Low"
+
+
+def accessibility_band(row) -> str:
+    avg_time = (
+        float(row.traffic_minutes_to_mg_road or 0)
+        + float(row.traffic_minutes_to_koramangala or 0)
+        + float(row.traffic_minutes_to_whitefield or 0)
+    ) / 3.0
+    if avg_time <= 22:
+        return "excellent"
+    if avg_time <= 32:
+        return "good"
+    return "moderate"
+
+
+def top_drivers(row):
+    drivers = [
+        ("mall traffic", float(row.mall_count or 0)),
+        ("office demand", float(row.office_count or 0)),
+        ("school-family demand", float(row.school_count or 0)),
+        ("metro connectivity", float(row.metro_count or 0)),
+    ]
+    drivers.sort(key=lambda item: item[1], reverse=True)
+    return drivers[:2]
+
+
+def build_summary(row, display_name: str, fit_text: str, positioning_hint: str) -> str:
+    drivers = top_drivers(row)
+    primary = drivers[0][0]
+    secondary = drivers[1][0]
+    access = accessibility_band(row)
+    intensity = commercial_intensity(row).lower()
+
+    if primary == "office demand":
+        opener = f"{row.area_name} stands out for a {display_name.lower()} because it benefits from strong weekday office footfall"
+    elif primary == "mall traffic":
+        opener = f"{row.area_name} is a strong fit for a {display_name.lower()} because it captures high lifestyle and destination traffic"
+    elif primary == "metro connectivity":
+        opener = f"{row.area_name} is attractive for a {display_name.lower()} because metro-led accessibility improves daily visit potential"
+    else:
+        opener = f"{row.area_name} works well for a {display_name.lower()} because it benefits from neighborhood-driven local demand"
+
+    return (
+        f"{opener}. The area is supported by {primary} and {secondary}, has {access} cross-city accessibility, "
+        f"and shows {intensity} market activity. This makes it suitable for {positioning_hint} and aligns well with "
+        f"{fit_text}."
+    )
+
+
+def market_strength_label(row) -> str:
+    score = float(row.final_score or 0)
+    if score >= 78:
+        return "high-conviction"
+    if score >= 62:
+        return "promising"
+    return "watchlist"
+
+
+def risk_signal(recommendation: dict[str, Any], competition_tolerance: str) -> str:
+    intensity = recommendation["market_intensity"]
+    avg_time = (
+        float(recommendation["traffic_minutes_to_mg_road"] or 0)
+        + float(recommendation["traffic_minutes_to_koramangala"] or 0)
+        + float(recommendation["traffic_minutes_to_whitefield"] or 0)
+    ) / 3.0
+    tolerance = competition_tolerance.lower()
+
+    if intensity == "High" and tolerance == "low":
+        return "High market crowding risk"
+    if intensity == "High" and avg_time > 32:
+        return "Crowded zone with slower cross-city access"
+    if avg_time > 32:
+        return "Execution depends on localized catchment"
+    return "Balanced risk for current brief"
+
+
+def build_decision_snapshot(recommendations, display_name: str, customer_type: str, competition_tolerance: str):
+    lead = recommendations[0]
+    return {
+        "lead_market": f"{lead['area_name']} ({lead['pincode']})",
+        "launch_thesis": (
+            f"{display_name} for {customer_type.lower()} with {lead['market_intensity'].lower()} market activity."
+        ),
+        "risk_watch": risk_signal(lead, competition_tolerance),
+        "next_milestone": f"Complete broker validation and on-ground visit for {lead['area_name']}.",
+    }
+
+
+def build_execution_plan(recommendations, display_name: str, customer_type: str, budget: str):
+    lead = recommendations[0]
+    area_label = f"{lead['area_name']} ({lead['pincode']})"
+    return {
+        "coordinator_brief": (
+            f"The coordinator agent shortlisted {len(recommendations)} Bangalore options for a "
+            f"{budget} budget {display_name.lower()} and is prioritizing {area_label} as the lead expansion zone."
+        ),
+        "intelligence_focus": (
+            f"The location intelligence agent found that {lead['area_name']} offers the best balance of demand, "
+            f"accessibility, and market intensity for {customer_type.lower()}."
+        ),
+        "next_steps": [
+            f"Validate {area_label} with a broker shortlist and one on-ground site visit this week.",
+            f"Compare rent, frontage, and walk-in visibility across the top {len(recommendations)} shortlisted areas.",
+            f"Build a launch P&L for a {display_name.lower()} in {lead['area_name']} using the {budget.lower()} budget assumption.",
+            f"Prepare a neighborhood-specific offer mix for {customer_type.lower()} before the final site decision.",
+        ],
+        "decision_checklist": [
+            "Confirm target rent range and deposit ceiling.",
+            "Verify frontage, parking, and peak-footfall windows.",
+            "Check nearby anchors such as malls, offices, schools, and metro exits.",
+            "Review licensing, staffing, and launch timeline assumptions before locking the site.",
+        ],
+    }
+
+
+def valid_area_clause() -> str:
+    return """
+    area_name IS NOT NULL
+    AND TRIM(area_name) != ''
+    AND NOT REGEXP_CONTAINS(
+      LOWER(area_name),
+      r'(\\bso\\b|\\bbo\\b|\\bgpo\\b|\\bho\\b|post office|campus|corporation|building|quarters|station)'
+    )
+    AND LOWER(TRIM(area_name)) NOT IN ('bangalore', 'bengaluru')
+    """
 
 
 def ensure_session_table(client: bigquery.Client):
@@ -54,9 +189,13 @@ def ensure_session_table(client: bigquery.Client):
         client.create_table(bigquery.Table(SESSION_TABLE, schema=schema), exists_ok=True)
 
 
-def save_expansion_session(client: bigquery.Client, payload: RecommendationRequest, response: dict[str, Any], session_id: str):
+def save_expansion_session(
+    client: bigquery.Client,
+    payload: RecommendationRequest,
+    decision_snapshot: dict[str, str],
+    session_id: str,
+):
     ensure_session_table(client)
-    snapshot = response.get("decision_snapshot", {})
     rows = [{
         "session_id": session_id,
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -66,259 +205,133 @@ def save_expansion_session(client: bigquery.Client, payload: RecommendationReque
         "competition_tolerance": payload.competition_tolerance,
         "area_name": payload.area_name,
         "pincode": payload.pincode,
-        "lead_market": snapshot.get("lead_market", ""),
-        "launch_thesis": snapshot.get("launch_thesis", ""),
-        "risk_watch": snapshot.get("risk_watch", ""),
-        "next_milestone": snapshot.get("next_milestone", ""),
+        "lead_market": decision_snapshot.get("lead_market", ""),
+        "launch_thesis": decision_snapshot.get("launch_thesis", ""),
+        "risk_watch": decision_snapshot.get("risk_watch", ""),
+        "next_milestone": decision_snapshot.get("next_milestone", ""),
     }]
     client.insert_rows_json(SESSION_TABLE, rows)
 
 
-def extract_json_block(text: str) -> dict[str, Any]:
-    stripped = text.strip()
-    if stripped.startswith("```"):
-        stripped = re.sub(r"^```(?:json)?", "", stripped).strip()
-        stripped = re.sub(r"```$", "", stripped).strip()
-    match = re.search(r"\{.*\}", stripped, flags=re.S)
-    if not match:
-        raise ValueError("No JSON object found in agent response.")
-    return json.loads(match.group(0))
+def run_backend_engine(payload: RecommendationRequest) -> dict[str, Any]:
+    client = bigquery.Client(project=PROJECT_ID)
+    business_type = payload.business_type.strip()
+    budget = payload.budget.strip()
+    area_name = payload.area_name.strip()
+    pincode = clean_pincode(payload.pincode)
+    customer_type = payload.customer_type.strip()
+    competition_tolerance = payload.competition_tolerance.strip()
 
+    if not business_type or not budget or not customer_type or not competition_tolerance:
+        raise HTTPException(status_code=400, detail="Please complete all required fields.")
 
-def as_text(value: Any, fallback: str = "") -> str:
-    if value is None:
-        return fallback
-    text = str(value).strip()
-    return text if text else fallback
+    if area_name and pincode:
+        raise HTTPException(status_code=400, detail="Choose either Preferred Area or Bangalore Pincode, not both.")
 
+    if pincode and len(pincode) != 6:
+        raise HTTPException(status_code=400, detail="Please enter a valid 6-digit Bangalore pincode or leave it blank.")
 
-def as_number(value: Any, fallback: float = 0) -> float:
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return fallback
-
-
-def normalize_recommendation(item: dict[str, Any]) -> dict[str, Any]:
-    area_name = as_text(item.get("area_name"), "Bangalore retail shortlist")
-    pincode = as_text(item.get("pincode"), "Pincode N/A")
-    final_score = round(as_number(item.get("final_score"), 0), 2)
-    mall_count = int(as_number(item.get("mall_count"), 0))
-    office_count = int(as_number(item.get("office_count"), 0))
-    school_count = int(as_number(item.get("school_count"), 0))
-    metro_count = int(as_number(item.get("metro_count"), 0))
-    mg_road = int(as_number(item.get("traffic_minutes_to_mg_road"), 0))
-    koramangala = int(as_number(item.get("traffic_minutes_to_koramangala"), 0))
-    whitefield = int(as_number(item.get("traffic_minutes_to_whitefield"), 0))
-    maps_url = as_text(
-        item.get("maps_url"),
-        f"https://www.google.com/maps/search/?api=1&query={area_name.replace(' ', '+')},+Bangalore",
+    profile_query = f"""
+    SELECT display_name, fit_text, positioning_hint
+    FROM `{PROFILE_TABLE}`
+    WHERE LOWER(business_type) = LOWER(@business_type)
+       OR EXISTS (
+         SELECT 1
+         FROM UNNEST(aliases) alias
+         WHERE LOWER(alias) = LOWER(@business_type)
+       )
+    LIMIT 1
+    """
+    profile_cfg = bigquery.QueryJobConfig(
+        query_parameters=[bigquery.ScalarQueryParameter("business_type", "STRING", business_type)]
     )
+    profile_rows = list(client.query(profile_query, job_config=profile_cfg).result())
+
+    if profile_rows:
+        profile = profile_rows[0]
+        display_name = profile.display_name
+        fit_text = profile.fit_text
+        positioning_hint = profile.positioning_hint
+    else:
+        display_name = business_type.title()
+        fit_text = "balanced urban demand and neighborhood accessibility"
+        positioning_hint = "well-positioned neighborhood retail format"
+
+    filters = [valid_area_clause()]
+    params = []
+
+    if area_name:
+        filters.append("LOWER(area_name) LIKE LOWER(@area_name)")
+        params.append(bigquery.ScalarQueryParameter("area_name", "STRING", f"%{area_name}%"))
+
+    if pincode:
+        filters.append("REGEXP_EXTRACT(CAST(pincode AS STRING), r'(\\d{6})') = @pincode")
+        params.append(bigquery.ScalarQueryParameter("pincode", "STRING", pincode))
+
+    query = f"""
+    SELECT
+      area_name,
+      pincode,
+      final_score,
+      mall_count,
+      office_count,
+      school_count,
+      metro_count,
+      avg_rating,
+      traffic_minutes_to_mg_road,
+      traffic_minutes_to_koramangala,
+      traffic_minutes_to_whitefield
+    FROM `{AREA_TABLE}`
+    WHERE {' AND '.join(filters)}
+    QUALIFY ROW_NUMBER() OVER (
+      PARTITION BY LOWER(area_name), REGEXP_EXTRACT(CAST(pincode AS STRING), r'(\\d{{6}})')
+      ORDER BY scored_at DESC, final_score DESC
+    ) = 1
+    ORDER BY final_score DESC
+    LIMIT 3
+    """
+
+    cfg = bigquery.QueryJobConfig(query_parameters=params)
+    rows = list(client.query(query, job_config=cfg).result())
+
+    if not rows:
+        raise HTTPException(status_code=404, detail="No matching recommendation found.")
+
+    recommendations = []
+    for row in rows:
+        recommendations.append({
+            "area_name": row.area_name,
+            "pincode": clean_pincode(row.pincode) if row.pincode else "Pincode N/A",
+            "summary": build_summary(row, display_name, fit_text, positioning_hint),
+            "positioning": positioning_hint,
+            "final_score": round(float(row.final_score or 0), 2),
+            "market_intensity": commercial_intensity(row),
+            "market_strength": market_strength_label(row),
+            "mall_count": int(row.mall_count or 0),
+            "office_count": int(row.office_count or 0),
+            "school_count": int(row.school_count or 0),
+            "metro_count": int(row.metro_count or 0),
+            "traffic_minutes_to_mg_road": int(row.traffic_minutes_to_mg_road or 0),
+            "traffic_minutes_to_koramangala": int(row.traffic_minutes_to_koramangala or 0),
+            "traffic_minutes_to_whitefield": int(row.traffic_minutes_to_whitefield or 0),
+            "maps_url": "https://www.google.com/maps/search/?api=1&query=" + quote_plus(f"{row.area_name}, Bangalore"),
+        })
+
+    decision_snapshot = build_decision_snapshot(recommendations, display_name, customer_type, competition_tolerance)
+    execution_plan = build_execution_plan(recommendations, display_name, customer_type, budget)
+    save_expansion_session(client, payload, decision_snapshot, str(uuid4()))
 
     return {
-        "area_name": area_name,
-        "pincode": pincode,
-        "summary": as_text(
-            item.get("summary"),
-            f"{area_name} is a shortlisted Bangalore retail market with balanced demand, access, and rollout potential.",
+        "title": f"LeaseLens AI Expansion Plan for a {budget} budget {display_name} in Bangalore",
+        "subtitle": f"Target customer: {customer_type} | Competition tolerance: {competition_tolerance}",
+        "copilot_summary": (
+            "LeaseLens AI coordinated location intelligence, customer-fit analysis, and launch planning "
+            "through a backend execution workflow to produce this expansion recommendation."
         ),
-        "positioning": as_text(item.get("positioning"), "balanced neighborhood retail"),
-        "final_score": final_score,
-        "market_intensity": as_text(item.get("market_intensity"), "Medium"),
-        "market_strength": as_text(item.get("market_strength"), "promising"),
-        "mall_count": mall_count,
-        "office_count": office_count,
-        "school_count": school_count,
-        "metro_count": metro_count,
-        "traffic_minutes_to_mg_road": mg_road,
-        "traffic_minutes_to_koramangala": koramangala,
-        "traffic_minutes_to_whitefield": whitefield,
-        "maps_url": maps_url,
+        "decision_snapshot": decision_snapshot,
+        "recommendations": recommendations,
+        "execution_plan": execution_plan,
     }
-
-
-def normalize_response(payload: RecommendationRequest, parsed: dict[str, Any]) -> dict[str, Any]:
-    recommendations = parsed.get("recommendations")
-    if not isinstance(recommendations, list):
-        recommendations = []
-
-    normalized_recommendations = [
-        normalize_recommendation(item)
-        for item in recommendations
-        if isinstance(item, dict)
-    ][:3]
-
-    lead = normalized_recommendations[0] if normalized_recommendations else None
-    decision_snapshot = parsed.get("decision_snapshot", {})
-    execution_plan = parsed.get("execution_plan", {})
-
-    return {
-        "title": as_text(
-            parsed.get("title"),
-            f"LeaseLens AI Expansion Plan for a {payload.budget} budget {payload.business_type.title()} in Bangalore",
-        ),
-        "subtitle": as_text(
-            parsed.get("subtitle"),
-            f"Target customer: {payload.customer_type} | Competition tolerance: {payload.competition_tolerance}",
-        ),
-        "copilot_summary": as_text(
-            parsed.get("copilot_summary"),
-            "LeaseLens AI coordinated location intelligence, customer fit analysis, and launch planning for this expansion brief.",
-        ),
-        "decision_snapshot": {
-            "lead_market": as_text(
-                decision_snapshot.get("lead_market"),
-                f"{lead['area_name']} ({lead['pincode']})" if lead else "Shortlist pending",
-            ),
-            "launch_thesis": as_text(
-                decision_snapshot.get("launch_thesis"),
-                f"{payload.business_type.title()} for {payload.customer_type.lower()} in a high-potential Bangalore micro-market."
-                if lead else "",
-            ),
-            "risk_watch": as_text(
-                decision_snapshot.get("risk_watch"),
-                "Validate rent, frontage, and local crowding before finalizing the site.",
-            ),
-            "next_milestone": as_text(
-                decision_snapshot.get("next_milestone"),
-                f"Complete site validation for {lead['area_name']}." if lead else "Complete shortlist validation.",
-            ),
-        },
-        "recommendations": normalized_recommendations,
-        "execution_plan": {
-            "coordinator_brief": as_text(
-                execution_plan.get("coordinator_brief"),
-                "The coordinator aligned the retail brief with Bangalore market intelligence and launch planning.",
-            ),
-            "intelligence_focus": as_text(
-                execution_plan.get("intelligence_focus"),
-                "The location analysis prioritized demand, accessibility, and commercial fit.",
-            ),
-            "next_steps": execution_plan.get("next_steps")
-            if isinstance(execution_plan.get("next_steps"), list)
-            else [
-                "Validate the lead market with on-ground site visits.",
-                "Compare rent and visibility across the shortlisted options.",
-                "Review launch economics before locking the site.",
-            ],
-            "decision_checklist": execution_plan.get("decision_checklist")
-            if isinstance(execution_plan.get("decision_checklist"), list)
-            else [
-                "Confirm rent range and deposit ceiling.",
-                "Check frontage, walk-in visibility, and access.",
-                "Validate neighborhood demand signals before finalizing the site.",
-            ],
-        },
-    }
-
-
-def build_prompt(payload: RecommendationRequest) -> str:
-    area_constraint = payload.area_name or "none"
-    pincode_constraint = payload.pincode or "none"
-    return f"""
-You are coordinating a Bangalore retail expansion decision.
-
-Business brief:
-- business_type: {payload.business_type}
-- budget: {payload.budget}
-- customer_type: {payload.customer_type}
-- competition_tolerance: {payload.competition_tolerance}
-- preferred_area: {area_constraint}
-- pincode: {pincode_constraint}
-
-Use the specialist sub-agents and available MCP tools to complete the workflow.
-
-Return ONLY valid JSON with this exact shape:
-{{
-  "title": "string",
-  "subtitle": "string",
-  "copilot_summary": "string",
-  "decision_snapshot": {{
-    "lead_market": "string",
-    "launch_thesis": "string",
-    "risk_watch": "string",
-    "next_milestone": "string"
-  }},
-  "recommendations": [
-    {{
-      "area_name": "string",
-      "pincode": "string",
-      "summary": "string",
-      "positioning": "string",
-      "final_score": "number or string",
-      "market_intensity": "string",
-      "market_strength": "string",
-      "mall_count": "number",
-      "office_count": "number",
-      "school_count": "number",
-      "metro_count": "number",
-      "traffic_minutes_to_mg_road": "number",
-      "traffic_minutes_to_koramangala": "number",
-      "traffic_minutes_to_whitefield": "number",
-      "maps_url": "string"
-    }}
-  ],
-  "execution_plan": {{
-    "coordinator_brief": "string",
-    "intelligence_focus": "string",
-    "next_steps": ["string"],
-    "decision_checklist": ["string"]
-  }}
-}}
-
-Rules:
-- recommend top 3 areas unless the brief strongly narrows to fewer
-- use BigQuery MCP and Maps MCP when helpful
-- keep the response product-grade and concise
-- do not output markdown or prose outside the JSON object
-""".strip()
-
-
-async def run_agent_json(payload: RecommendationRequest) -> dict[str, Any]:
-    session_service = InMemorySessionService()
-    memory_service = InMemoryMemoryService()
-    runner = Runner(
-        agent=build_root_agent(),
-        app_name=APP_NAME,
-        session_service=session_service,
-        memory_service=memory_service,
-    )
-    session_id = str(uuid4())
-    await session_service.create_session(
-        app_name=APP_NAME,
-        user_id=USER_ID,
-        session_id=session_id,
-    )
-
-    prompt = build_prompt(payload)
-    message = Content(parts=[Part(text=prompt)], role="user")
-    final_response_text = ""
-
-    async for event in runner.run_async(user_id=USER_ID, session_id=session_id, new_message=message):
-        if event.is_final_response() and event.content and event.content.parts:
-            final_response_text = "".join(
-                part.text for part in event.content.parts if getattr(part, "text", None)
-            )
-
-    if not final_response_text:
-        raise HTTPException(status_code=502, detail="Backend agent did not return a final response.")
-
-    try:
-        parsed = extract_json_block(final_response_text)
-    except Exception as exc:
-        raise HTTPException(
-            status_code=502,
-            detail=f"Backend agent returned non-JSON output: {str(exc)}",
-        ) from exc
-
-    normalized = normalize_response(payload, parsed)
-    normalized["_session_id"] = session_id
-    return normalized
-
-
-@app.get("/health")
-async def health():
-    return {"ok": True, "service": "lease-lens-ai"}
 
 
 @app.get("/")
@@ -330,13 +343,14 @@ async def root():
     }
 
 
+@app.get("/health")
+async def health():
+    return {"ok": True, "service": "lease-lens-ai"}
+
+
 @app.post("/recommend-agent")
 async def recommend_agent(payload: RecommendationRequest):
-    response = await run_agent_json(payload)
-    session_id = response.pop("_session_id", str(uuid4()))
-    client = bigquery.Client(project=PROJECT_ID)
-    save_expansion_session(client, payload, response, session_id)
-    return JSONResponse(response)
+    return JSONResponse(run_backend_engine(payload))
 
 
 @app.get("/recent-sessions")
