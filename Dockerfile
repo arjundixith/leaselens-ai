@@ -12,4 +12,4 @@ ENV GOOGLE_CLOUD_PROJECT=learn-mcp-490919
 ENV GOOGLE_CLOUD_LOCATION=asia-south1
 ENV GOOGLE_GENAI_USE_VERTEXAI=true
 
-CMD ["adk", "web", "--host", "0.0.0.0", "--port", "8080"]
+CMD ["uvicorn", "lease_lens_app.main:app", "--host", "0.0.0.0", "--port", "8080"]
