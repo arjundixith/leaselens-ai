@@ -107,6 +107,7 @@ body {
 }
 
 .panel {
+  position: relative;
   margin-top: 24px;
   padding: 24px;
   border: 1px solid var(--line);
@@ -114,6 +115,14 @@ body {
   background: var(--panel);
   box-shadow: var(--shadow);
   backdrop-filter: blur(8px);
+}
+
+.form-panel {
+  z-index: 10;
+}
+
+.output-panel {
+  z-index: 1;
 }
 
 .section-head h2 {
@@ -479,14 +488,15 @@ select:disabled {
 .area-field,
 .pincode-field {
   position: relative;
+  z-index: 20;
 }
 
 .suggestions {
   position: absolute;
-  top: calc(100% + 36px);
+  top: calc(100% + 10px);
   left: 0;
   right: 0;
-  z-index: 20;
+  z-index: 40;
   background: #fff;
   border: 1px solid var(--line);
   border-radius: 14px;
