@@ -82,6 +82,7 @@
               <span>Preferred Area</span>
               <input id="area_name" name="area_name" autocomplete="off" placeholder="Search Bangalore area">
             </label>
+            <p class="field-hint">Try areas like Indiranagar, Jayanagar, Koramangala, or Malleswaram.</p>
             <div id="area-suggestions" class="suggestions" hidden></div>
           </div>
 
@@ -90,6 +91,7 @@
               <span>Bangalore Pincode</span>
               <input id="pincode" name="pincode" inputmode="numeric" maxlength="6" autocomplete="off" placeholder="Search pincode">
             </label>
+            <p class="field-hint">Start typing a 6-digit Bangalore pincode to narrow the shortlist quickly.</p>
             <div id="pincode-suggestions" class="suggestions" hidden></div>
           </div>
         </div>
@@ -189,6 +191,14 @@
       container.hidden = false;
     }
 
+    async function loadTopSuggestions(url, container, key) {
+      try {
+        await loadSuggestions(url, container, key, '', null);
+      } catch {
+        container.hidden = true;
+      }
+    }
+
     const handleAreaInput = debounce(async () => {
       resetError();
       updateMutualExclusion();
@@ -240,6 +250,18 @@
 
     areaInput.addEventListener('input', handleAreaInput);
     pincodeInput.addEventListener('input', handlePincodeInput);
+
+    areaInput.addEventListener('focus', () => {
+      if (!areaInput.disabled && !areaInput.value.trim()) {
+        loadTopSuggestions('/area-suggestions', areaSuggestions, 'areas');
+      }
+    });
+
+    pincodeInput.addEventListener('focus', () => {
+      if (!pincodeInput.disabled && !pincodeInput.value.trim()) {
+        loadTopSuggestions('/pincode-suggestions', pincodeSuggestions, 'pincodes');
+      }
+    });
 
     areaSuggestions.addEventListener('click', (event) => {
       const button = event.target.closest('.suggestion-item');

@@ -1,4 +1,6 @@
 import os
+import time
+import asyncio
 from pathlib import Path
 
 import httpx
@@ -20,6 +22,15 @@ app = FastAPI(title="LeaseLens UI")
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
+SUGGESTION_TTL_SECONDS = 1800
+SUGGESTION_LIMIT = 8
+_suggestion_lock = asyncio.Lock()
+_suggestion_cache = {
+    "areas": [],
+    "pincodes": [],
+    "loaded_at": 0.0,
+}
+
 
 def clean_pincode(value: str) -> str:
     return "".join(ch for ch in str(value or "") if ch.isdigit())[:6]
@@ -35,6 +46,88 @@ def valid_area_clause() -> str:
     )
     AND LOWER(TRIM(area_name)) NOT IN ('bangalore', 'bengaluru')
     """
+
+
+async def get_suggestion_catalog() -> dict:
+    now = time.time()
+    if _suggestion_cache["areas"] and now - _suggestion_cache["loaded_at"] < SUGGESTION_TTL_SECONDS:
+        return _suggestion_cache
+
+    async with _suggestion_lock:
+        now = time.time()
+        if _suggestion_cache["areas"] and now - _suggestion_cache["loaded_at"] < SUGGESTION_TTL_SECONDS:
+            return _suggestion_cache
+
+        client = bigquery.Client(project=PROJECT_ID)
+        area_query = f"""
+        SELECT area_name
+        FROM (
+          SELECT
+            area_name,
+            MAX(final_score) AS top_score
+          FROM `{AREA_TABLE}`
+          WHERE {valid_area_clause()}
+          GROUP BY area_name
+        )
+        ORDER BY top_score DESC, area_name
+        LIMIT 2500
+        """
+        pincode_query = f"""
+        SELECT DISTINCT REGEXP_EXTRACT(CAST(pincode AS STRING), r'(\\d{{6}})') AS clean_pincode
+        FROM `{AREA_TABLE}`
+        WHERE REGEXP_EXTRACT(CAST(pincode AS STRING), r'(\\d{{6}})') IS NOT NULL
+        ORDER BY clean_pincode
+        """
+
+        area_rows = list(client.query(area_query).result())
+        pincode_rows = list(client.query(pincode_query).result())
+
+        _suggestion_cache["areas"] = [row.area_name for row in area_rows if row.area_name]
+        _suggestion_cache["pincodes"] = [row.clean_pincode for row in pincode_rows if row.clean_pincode]
+        _suggestion_cache["loaded_at"] = now
+
+    return _suggestion_cache
+
+
+def ranked_area_matches(query: str, areas: list[str]) -> list[str]:
+    if not query:
+        return areas[:SUGGESTION_LIMIT]
+
+    lowered = query.lower()
+    starts = []
+    word_starts = []
+    contains = []
+
+    for area in areas:
+        area_lower = area.lower()
+        if area_lower.startswith(lowered):
+            starts.append(area)
+        elif any(part.startswith(lowered) for part in area_lower.split()):
+            word_starts.append(area)
+        elif lowered in area_lower:
+            contains.append(area)
+
+        if len(starts) + len(word_starts) + len(contains) >= 40:
+            # enough candidates gathered from a ranked source list
+            continue
+
+    ordered = starts + word_starts + contains
+    seen = set()
+    deduped = []
+    for area in ordered:
+        if area in seen:
+            continue
+        seen.add(area)
+        deduped.append(area)
+        if len(deduped) >= SUGGESTION_LIMIT:
+            break
+    return deduped
+
+
+def ranked_pincode_matches(query: str, pincodes: list[str]) -> list[str]:
+    if not query:
+        return pincodes[:SUGGESTION_LIMIT]
+    return [pincode for pincode in pincodes if pincode.startswith(query)][:SUGGESTION_LIMIT]
 
 
 async def call_backend(method: str, path: str, **kwargs):
@@ -75,71 +168,16 @@ async def engine_details(request: Request):
 
 @app.get("/area-suggestions")
 async def area_suggestions(q: str = Query("", min_length=0, max_length=50)):
-    client = bigquery.Client(project=PROJECT_ID)
+    catalog = await get_suggestion_catalog()
     q = q.strip()
-
-    if q:
-        query = f"""
-        SELECT DISTINCT area_name
-        FROM `{AREA_TABLE}`
-        WHERE {valid_area_clause()}
-          AND STARTS_WITH(LOWER(area_name), LOWER(@query))
-        ORDER BY area_name
-        LIMIT 8
-        """
-        cfg = bigquery.QueryJobConfig(
-            query_parameters=[bigquery.ScalarQueryParameter("query", "STRING", q)]
-        )
-        rows = list(client.query(query, job_config=cfg).result())
-    else:
-        query = f"""
-        SELECT area_name
-        FROM (
-          SELECT
-            area_name,
-            final_score,
-            ROW_NUMBER() OVER (PARTITION BY LOWER(area_name) ORDER BY final_score DESC) AS rn
-          FROM `{AREA_TABLE}`
-          WHERE {valid_area_clause()}
-        )
-        WHERE rn = 1
-        ORDER BY final_score DESC, area_name
-        LIMIT 8
-        """
-        rows = list(client.query(query).result())
-
-    return JSONResponse({"areas": [row.area_name for row in rows]})
+    return JSONResponse({"areas": ranked_area_matches(q, catalog["areas"])})
 
 
 @app.get("/pincode-suggestions")
 async def pincode_suggestions(q: str = Query("", min_length=0, max_length=10)):
-    client = bigquery.Client(project=PROJECT_ID)
+    catalog = await get_suggestion_catalog()
     q = clean_pincode(q)
-
-    if q:
-        query = f"""
-        SELECT DISTINCT REGEXP_EXTRACT(CAST(pincode AS STRING), r'(\\d{{6}})') AS clean_pincode
-        FROM `{AREA_TABLE}`
-        WHERE REGEXP_EXTRACT(CAST(pincode AS STRING), r'(\\d{{6}})') IS NOT NULL
-          AND REGEXP_EXTRACT(CAST(pincode AS STRING), r'(\\d{{6}})') LIKE @query
-        ORDER BY clean_pincode
-        LIMIT 8
-        """
-        cfg = bigquery.QueryJobConfig(
-            query_parameters=[bigquery.ScalarQueryParameter("query", "STRING", f"{q}%")]
-        )
-        rows = list(client.query(query, job_config=cfg).result())
-    else:
-        query = f"""
-        SELECT DISTINCT REGEXP_EXTRACT(CAST(pincode AS STRING), r'(\\d{{6}})') AS clean_pincode
-        FROM `{AREA_TABLE}`
-        WHERE REGEXP_EXTRACT(CAST(pincode AS STRING), r'(\\d{{6}})') IS NOT NULL
-        ORDER BY clean_pincode
-        LIMIT 8
-        """
-        rows = list(client.query(query).result())
-
-    return JSONResponse({"pincodes": [row.clean_pincode for row in rows if row.clean_pincode]})
+    return JSONResponse({"pincodes": ranked_pincode_matches(q, catalog["pincodes"])})
 
 
 @app.post("/recommend")
