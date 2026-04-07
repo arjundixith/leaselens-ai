@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>LeaseLens AI</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <main class="shell">
+    <section class="hero">
+      <div class="hero-copy">
+        <p class="eyebrow">Retail Expansion Intelligence</p>
+        <h1>LeaseLens AI</h1>
+        <p class="subhead">
+          Evaluate Bangalore areas and pincodes for your next retail outlet using AI-powered location intelligence.
+        </p>
+      </div>
+      <div class="hero-card">
+        <p class="hero-card-label">Built for</p>
+        <p class="hero-card-value">Bakery, Cafe, Pharmacy, Salon, Grocery, Boutique, Clinic</p>
+      </div>
+    </section>
+
+    <section class="panel form-panel">
+      <div class="section-head">
+        <h2>Business Inputs</h2>
+        <p>Enter your business profile to generate tailored Bangalore retail recommendations.</p>
+      </div>
+
+      <form id="recommend-form" novalidate>
+        <div class="grid">
+          <label>
+            <span>Business Type <strong>*</strong></span>
+            <select name="business_type" required>
+              <option value="">Select business type</option>
+              <option value="bakery">Bakery</option>
+              <option value="cafe">Cafe</option>
+              <option value="salon">Salon</option>
+              <option value="pharmacy">Pharmacy</option>
+              <option value="grocery">Grocery</option>
+              <option value="boutique">Boutique</option>
+              <option value="clinic">Clinic</option>
+            </select>
+          </label>
+
+          <label>
+            <span>Budget <strong>*</strong></span>
+            <select name="budget" required>
+              <option value="">Select budget</option>
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+            </select>
+          </label>
+
+          <label>
+            <span>Target Customer <strong>*</strong></span>
+            <select name="customer_type" required>
+              <option value="">Select target customer</option>
+              <option value="families">Families</option>
+              <option value="young professionals">Young Professionals</option>
+              <option value="students">Students</option>
+              <option value="premium customers">Premium Customers</option>
+              <option value="daily commuters">Daily Commuters</option>
+            </select>
+          </label>
+
+          <label>
+            <span>Competition Tolerance <strong>*</strong></span>
+            <select name="competition_tolerance" required>
+              <option value="">Select competition tolerance</option>
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+            </select>
+          </label>
+
+          <div class="area-field">
+            <label>
+              <span>Preferred Area</span>
+              <input id="area_name" name="area_name" autocomplete="off" placeholder="Search Bangalore area">
+            </label>
+            <div id="area-suggestions" class="suggestions" hidden></div>
+          </div>
+
+          <div class="pincode-field">
+            <label>
+              <span>Bangalore Pincode</span>
+              <input id="pincode" name="pincode" inputmode="numeric" maxlength="6" autocomplete="off" placeholder="Search pincode">
+            </label>
+            <div id="pincode-suggestions" class="suggestions" hidden></div>
+          </div>
+        </div>
+
+        <p class="helper">Fields marked with * are required. Use either Preferred Area or Bangalore Pincode. Leave both blank for city-wide recommendations.</p>
+        <p id="form-error" class="form-error" hidden></p>
+
+        <button type="submit">Generate Recommendations</button>
+      </form>
+    </section>
+
+    <section class="panel output-panel">
+      <div class="section-head">
+        <h2>Recommendations</h2>
+        <p>Decision-ready location guidance for Bangalore retail expansion.</p>
+      </div>
+      <div id="answer" class="results-empty">Enter your business requirements to generate recommendations.</div>
+    </section>
+  </main>
+
+  <script>
+    const form = document.getElementById('recommend-form');
+    const answer = document.getElementById('answer');
+    const formError = document.getElementById('form-error');
+
+    const areaInput = document.getElementById('area_name');
+    const pincodeInput = document.getElementById('pincode');
+
+    const areaSuggestions = document.getElementById('area-suggestions');
+    const pincodeSuggestions = document.getElementById('pincode-suggestions');
+
+    function cleanPincode(value) {
+      return String(value || '').replace(/\D/g, '').slice(0, 6);
+    }
+
+    function resetError() {
+      formError.hidden = true;
+      formError.textContent = '';
+    }
+
+    function updateMutualExclusion() {
+      const hasArea = areaInput.value.trim().length > 0;
+      const hasPincode = pincodeInput.value.trim().length > 0;
+
+      pincodeInput.disabled = hasArea;
+      areaInput.disabled = hasPincode;
+
+      if (hasArea) {
+        pincodeSuggestions.hidden = true;
+        pincodeSuggestions.innerHTML = '';
+      }
+      if (hasPincode) {
+        areaSuggestions.hidden = true;
+        areaSuggestions.innerHTML = '';
+      }
+    }
+
+    async function loadSuggestions(url, container, key, query) {
+      const response = await fetch(`${url}?q=${encodeURIComponent(query)}`);
+      const data = await response.json();
+      const items = data[key] || [];
+
+      if (!items.length) {
+        container.hidden = true;
+        container.innerHTML = '';
+        return;
+      }
+
+      container.innerHTML = items.map(item => `
+        <button type="button" class="suggestion-item" data-value="${item}">${item}</button>
+      `).join('');
+      container.hidden = false;
+    }
+
+    areaInput.addEventListener('input', async () => {
+      resetError();
+      updateMutualExclusion();
+
+      const query = areaInput.value.trim();
+      if (!query || areaInput.disabled) {
+        areaSuggestions.hidden = true;
+        areaSuggestions.innerHTML = '';
+        return;
+      }
+
+      try {
+        await loadSuggestions('/area-suggestions', areaSuggestions, 'areas', query);
+      } catch {
+        areaSuggestions.hidden = true;
+      }
+    });
+
+    pincodeInput.addEventListener('input', async () => {
+      resetError();
+      pincodeInput.value = cleanPincode(pincodeInput.value);
+      updateMutualExclusion();
+
+      const query = pincodeInput.value.trim();
+      if (!query || pincodeInput.disabled) {
+        pincodeSuggestions.hidden = true;
+        pincodeSuggestions.innerHTML = '';
+        return;
+      }
+
+      try {
+        await loadSuggestions('/pincode-suggestions', pincodeSuggestions, 'pincodes', query);
+      } catch {
+        pincodeSuggestions.hidden = true;
+      }
+    });
+
+    areaSuggestions.addEventListener('click', (event) => {
+      const button = event.target.closest('.suggestion-item');
+      if (!button) return;
+      areaInput.value = button.dataset.value;
+      areaSuggestions.hidden = true;
+      areaSuggestions.innerHTML = '';
+      updateMutualExclusion();
+    });
+
+    pincodeSuggestions.addEventListener('click', (event) => {
+      const button = event.target.closest('.suggestion-item');
+      if (!button) return;
+      pincodeInput.value = cleanPincode(button.dataset.value);
+      pincodeSuggestions.hidden = true;
+      pincodeSuggestions.innerHTML = '';
+      updateMutualExclusion();
+    });
+
+    document.addEventListener('click', (event) => {
+      if (!event.target.closest('.area-field')) {
+        areaSuggestions.hidden = true;
+      }
+      if (!event.target.closest('.pincode-field')) {
+        pincodeSuggestions.hidden = true;
+      }
+    });
+
+    function renderRecommendations(data) {
+      const cards = data.recommendations.map((item, index) => `
+        <article class="result-card">
+          <div class="result-top">
+            <div>
+              <p class="result-rank">Recommendation ${index + 1}</p>
+              <h3>${item.area_name} <span>(${item.pincode})</span></h3>
+            </div>
+            <div class="score-chip">Score ${item.final_score}</div>
+          </div>
+          <p class="result-summary">${item.summary}</p>
+          <div class="result-grid">
+            <div><strong>Demand</strong><br>Malls ${item.mall_count}, Offices ${item.office_count}, Schools ${item.school_count}, Metro ${item.metro_count}</div>
+            <div><strong>Market Intensity</strong><br>${item.market_intensity}</div>
+            <div><strong>Accessibility</strong><br>MG Road ${item.traffic_minutes_to_mg_road} min, Koramangala ${item.traffic_minutes_to_koramangala} min, Whitefield ${item.traffic_minutes_to_whitefield} min</div>
+            <div><strong>Positioning</strong><br>${item.positioning}</div>
+          </div>
+          <a class="maps-link" href="${item.maps_url}" target="_blank" rel="noopener noreferrer">Open in Google Maps</a>
+        </article>
+      `).join('');
+
+      answer.innerHTML = `
+        <div class="results-head">
+          <h3>${data.title}</h3>
+          <p>${data.subtitle}</p>
+        </div>
+        <div class="results-list">${cards}</div>
+      `;
+    }
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      resetError();
+
+      pincodeInput.value = cleanPincode(pincodeInput.value);
+
+      const formData = new FormData(form);
+      formData.set('pincode', cleanPincode(formData.get('pincode')));
+
+      const requiredFields = ['business_type', 'budget', 'customer_type', 'competition_tolerance'];
+      for (const field of requiredFields) {
+        if (!String(formData.get(field) || '').trim()) {
+          formError.hidden = false;
+          formError.textContent = 'Please complete all required fields before generating recommendations.';
+          return;
+        }
+      }
+
+      const areaName = String(formData.get('area_name') || '').trim();
+      const pincode = String(formData.get('pincode') || '').trim();
+
+      if (areaName && pincode) {
+        formError.hidden = false;
+        formError.textContent = 'Use either Preferred Area or Bangalore Pincode, not both.';
+        return;
+      }
+
+      if (pincode && !/^\d{6}$/.test(pincode)) {
+        formError.hidden = false;
+        formError.textContent = 'Please enter a valid 6-digit Bangalore pincode.';
+        return;
+      }
+
+      answer.innerHTML = '<div class="results-empty">Generating recommendations...</div>';
+
+      try {
+        const response = await fetch('/recommend', {
+          method: 'POST',
+          body: formData
+        });
+
+        const data = await response.json();
+
+        if (!response.ok || data.error) {
+          answer.innerHTML = `<div class="results-empty">${data.error || 'Unable to load recommendations right now.'}</div>`;
+          return;
+        }
+
+        renderRecommendations(data);
+      } catch {
+        answer.innerHTML = '<div class="results-empty">Unable to load recommendations right now. Please try again.</div>';
+      }
+    });
+
+    updateMutualExclusion();
+  </script>
+</body>
+</html>

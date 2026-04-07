@@ -1,0 +1,11 @@
+google-adk==1.22.0
+python-dotenv
+google-auth
+google-cloud-bigquery
+google-genai
+fastapi
+uvicorn[standard]
+jinja2
+python-multipart
+httpx
+

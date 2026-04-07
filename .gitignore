@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+.env.*
+*.log
+node_modules/
+.DS_Store
+*.sqlite3
+*.db
+bangalore_pincodes_raw.csv
+bangalore_pincodes_geocoded.csv
+peer_competition_counts.csv
