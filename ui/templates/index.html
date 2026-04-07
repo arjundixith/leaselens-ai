@@ -269,6 +269,7 @@
     });
 
     function renderRecommendations(data) {
+      const lead = data.recommendations[0] || {};
       const cards = data.recommendations.map((item, index) => `
         <article class="result-card">
           <div class="result-top">
@@ -279,12 +280,20 @@
             <div class="score-chip">Score ${item.final_score}</div>
           </div>
           <p class="result-badge">Market signal: ${item.market_strength}</p>
+          <div class="signal-row">
+            <span class="signal-pill">${item.primary_signal || 'Balanced demand'}</span>
+            <span class="signal-pill">${item.market_intensity} intensity</span>
+          </div>
           <p class="result-summary">${item.summary}</p>
+          <p class="result-narrative">${item.market_narrative || ''}</p>
           <div class="result-grid">
             <div><strong>Demand</strong><br>Malls ${item.mall_count}, Offices ${item.office_count}, Schools ${item.school_count}, Metro ${item.metro_count}</div>
             <div><strong>Market Intensity</strong><br>${item.market_intensity}</div>
             <div><strong>Accessibility</strong><br>MG Road ${item.traffic_minutes_to_mg_road} min, Koramangala ${item.traffic_minutes_to_koramangala} min, Whitefield ${item.traffic_minutes_to_whitefield} min</div>
             <div><strong>Positioning</strong><br>${item.positioning}</div>
+          </div>
+          <div class="watchout-box">
+            <strong>Watchout</strong><br>${item.watchout || 'No major watchout flagged in the first-pass shortlist.'}
           </div>
           <a class="maps-link" href="${item.maps_url}" target="_blank" rel="noopener noreferrer">Open in Google Maps</a>
         </article>
@@ -298,6 +307,20 @@
           <h3>${data.title}</h3>
           <p>${data.subtitle}</p>
           <p class="copilot-summary">${data.copilot_summary || ''}</p>
+        </div>
+        <div class="shortlist-banner">
+          <article class="banner-card">
+            <p class="banner-label">Top Pick</p>
+            <h4>${lead.area_name || 'Awaiting shortlist'}</h4>
+          </article>
+          <article class="banner-card">
+            <p class="banner-label">Best Signal</p>
+            <h4>${lead.primary_signal || data.decision_snapshot?.launch_thesis || ''}</h4>
+          </article>
+          <article class="banner-card">
+            <p class="banner-label">Watchout</p>
+            <h4>${lead.watchout || data.decision_snapshot?.risk_watch || ''}</h4>
+          </article>
         </div>
         <div class="snapshot-grid">
           <article class="snapshot-card">

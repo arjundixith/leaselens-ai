@@ -93,9 +93,16 @@ async def area_suggestions(q: str = Query("", min_length=0, max_length=50)):
         rows = list(client.query(query, job_config=cfg).result())
     else:
         query = f"""
-        SELECT DISTINCT area_name
-        FROM `{AREA_TABLE}`
-        WHERE {valid_area_clause()}
+        SELECT area_name
+        FROM (
+          SELECT
+            area_name,
+            final_score,
+            ROW_NUMBER() OVER (PARTITION BY LOWER(area_name) ORDER BY final_score DESC) AS rn
+          FROM `{AREA_TABLE}`
+          WHERE {valid_area_clause()}
+        )
+        WHERE rn = 1
         ORDER BY final_score DESC, area_name
         LIMIT 8
         """

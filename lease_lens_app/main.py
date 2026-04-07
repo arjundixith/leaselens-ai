@@ -67,6 +67,133 @@ def top_drivers(row):
     return drivers[:2]
 
 
+def demand_mix(customer_type: str, business_type: str) -> dict[str, float]:
+    customer_key = customer_type.lower()
+    business_key = business_type.lower()
+
+    mix = {
+        "mall_count": 1.0,
+        "office_count": 1.0,
+        "school_count": 1.0,
+        "metro_count": 1.0,
+    }
+
+    if customer_key == "families":
+        mix["school_count"] += 0.9
+        mix["mall_count"] += 0.2
+    elif customer_key == "young professionals":
+        mix["office_count"] += 0.9
+        mix["metro_count"] += 0.4
+    elif customer_key == "students":
+        mix["school_count"] += 0.8
+        mix["metro_count"] += 0.5
+    elif customer_key == "premium customers":
+        mix["mall_count"] += 1.0
+        mix["office_count"] += 0.3
+    elif customer_key == "daily commuters":
+        mix["metro_count"] += 1.0
+        mix["office_count"] += 0.3
+
+    if business_key == "salon":
+        mix["mall_count"] += 0.8
+        mix["office_count"] += 0.5
+    elif business_key == "pharmacy":
+        mix["school_count"] += 0.5
+        mix["metro_count"] += 0.4
+    elif business_key == "grocery":
+        mix["school_count"] += 0.8
+        mix["metro_count"] += 0.2
+    elif business_key == "boutique":
+        mix["mall_count"] += 1.0
+        mix["office_count"] += 0.3
+    elif business_key == "clinic":
+        mix["school_count"] += 0.7
+        mix["metro_count"] += 0.3
+    elif business_key in {"bakery", "cafe"}:
+        mix["mall_count"] += 0.6
+        mix["office_count"] += 0.4
+
+    return mix
+
+
+def accessibility_score(row, budget: str) -> float:
+    avg_time = (
+        float(row.traffic_minutes_to_mg_road or 0)
+        + float(row.traffic_minutes_to_koramangala or 0)
+        + float(row.traffic_minutes_to_whitefield or 0)
+    ) / 3.0
+
+    if avg_time <= 18:
+        score = 100
+    elif avg_time <= 24:
+        score = 82
+    elif avg_time <= 32:
+        score = 66
+    elif avg_time <= 40:
+        score = 52
+    else:
+        score = 40
+
+    if budget.lower() == "low":
+        score += 6
+    elif budget.lower() == "high":
+        score -= 4
+
+    return max(0, min(100, score))
+
+
+def demand_score(row, customer_type: str, business_type: str) -> float:
+    mix = demand_mix(customer_type, business_type)
+    total = (
+        float(row.mall_count or 0) * mix["mall_count"]
+        + float(row.office_count or 0) * mix["office_count"]
+        + float(row.school_count or 0) * mix["school_count"]
+        + float(row.metro_count or 0) * mix["metro_count"]
+    )
+    return min(100.0, total * 4.2)
+
+
+def fit_score(row, payload: RecommendationRequest) -> float:
+    base = float(row.final_score or 0)
+    demand = demand_score(row, payload.customer_type, payload.business_type)
+    access = accessibility_score(row, payload.budget)
+    quality = min(100.0, float(row.avg_rating or 0) * 20)
+    return round(base * 0.5 + demand * 0.25 + access * 0.15 + quality * 0.10, 2)
+
+
+def primary_signal(row, customer_type: str, business_type: str) -> str:
+    mix = demand_mix(customer_type, business_type)
+    weighted = [
+        ("Lifestyle traffic", float(row.mall_count or 0) * mix["mall_count"]),
+        ("Office catchment", float(row.office_count or 0) * mix["office_count"]),
+        ("Family demand", float(row.school_count or 0) * mix["school_count"]),
+        ("Transit access", float(row.metro_count or 0) * mix["metro_count"]),
+    ]
+    weighted.sort(key=lambda item: item[1], reverse=True)
+    return weighted[0][0]
+
+
+def watchout_label(row) -> str:
+    intensity = commercial_intensity(row)
+    access = accessibility_band(row)
+    if intensity == "High" and access == "moderate":
+        return "Crowded micro-market with slower cross-city access."
+    if intensity == "High":
+        return "High-activity zone, so frontage and differentiation matter."
+    if access == "moderate":
+        return "Works best with a strong local catchment rather than pass-through traffic."
+    return "Low structural risk for a first-pass shortlist."
+
+
+def market_narrative(row, payload: RecommendationRequest) -> str:
+    signal = primary_signal(row, payload.customer_type, payload.business_type)
+    access = accessibility_band(row)
+    return (
+        f"Best for {signal.lower()} with {access} accessibility for a "
+        f"{payload.customer_type.lower()}-focused {payload.business_type.lower()} format."
+    )
+
+
 def build_summary(row, display_name: str, fit_text: str, positioning_hint: str) -> str:
     drivers = top_drivers(row)
     primary = drivers[0][0]
@@ -154,6 +281,31 @@ def build_execution_plan(recommendations, display_name: str, customer_type: str,
             "Review licensing, staffing, and launch timeline assumptions before locking the site.",
         ],
     }
+
+
+def candidate_query(filters: list[str]) -> str:
+    return f"""
+    SELECT
+      area_name,
+      pincode,
+      final_score,
+      mall_count,
+      office_count,
+      school_count,
+      metro_count,
+      avg_rating,
+      traffic_minutes_to_mg_road,
+      traffic_minutes_to_koramangala,
+      traffic_minutes_to_whitefield
+    FROM `{AREA_TABLE}`
+    WHERE {' AND '.join(filters)}
+    QUALIFY ROW_NUMBER() OVER (
+      PARTITION BY LOWER(area_name), REGEXP_EXTRACT(CAST(pincode AS STRING), r'(\\d{{6}})')
+      ORDER BY scored_at DESC, final_score DESC
+    ) = 1
+    ORDER BY final_score DESC
+    LIMIT 12
+    """
 
 
 def valid_area_clause() -> str:
@@ -268,45 +420,35 @@ def run_backend_engine(payload: RecommendationRequest) -> dict[str, Any]:
         filters.append("REGEXP_EXTRACT(CAST(pincode AS STRING), r'(\\d{6})') = @pincode")
         params.append(bigquery.ScalarQueryParameter("pincode", "STRING", pincode))
 
-    query = f"""
-    SELECT
-      area_name,
-      pincode,
-      final_score,
-      mall_count,
-      office_count,
-      school_count,
-      metro_count,
-      avg_rating,
-      traffic_minutes_to_mg_road,
-      traffic_minutes_to_koramangala,
-      traffic_minutes_to_whitefield
-    FROM `{AREA_TABLE}`
-    WHERE {' AND '.join(filters)}
-    QUALIFY ROW_NUMBER() OVER (
-      PARTITION BY LOWER(area_name), REGEXP_EXTRACT(CAST(pincode AS STRING), r'(\\d{{6}})')
-      ORDER BY scored_at DESC, final_score DESC
-    ) = 1
-    ORDER BY final_score DESC
-    LIMIT 3
-    """
-
     cfg = bigquery.QueryJobConfig(query_parameters=params)
-    rows = list(client.query(query, job_config=cfg).result())
+    rows = list(client.query(candidate_query(filters), job_config=cfg).result())
 
     if not rows:
         raise HTTPException(status_code=404, detail="No matching recommendation found.")
 
+    ranked_rows = sorted(
+        rows,
+        key=lambda row: (
+            fit_score(row, payload),
+            float(row.final_score or 0),
+            float(row.avg_rating or 0),
+        ),
+        reverse=True,
+    )[:3]
+
     recommendations = []
-    for row in rows:
+    for row in ranked_rows:
         recommendations.append({
             "area_name": row.area_name,
             "pincode": clean_pincode(row.pincode) if row.pincode else "Pincode N/A",
             "summary": build_summary(row, display_name, fit_text, positioning_hint),
             "positioning": positioning_hint,
-            "final_score": round(float(row.final_score or 0), 2),
+            "final_score": fit_score(row, payload),
             "market_intensity": commercial_intensity(row),
             "market_strength": market_strength_label(row),
+            "market_narrative": market_narrative(row, payload),
+            "primary_signal": primary_signal(row, customer_type, business_type),
+            "watchout": watchout_label(row),
             "mall_count": int(row.mall_count or 0),
             "office_count": int(row.office_count or 0),
             "school_count": int(row.school_count or 0),
